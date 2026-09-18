@@ -95,6 +95,9 @@ describe('publishing and rolling back versions', () => {
     const second = await app.inject({ method: 'POST', url: `${url}/versions`, headers: ADMIN, payload: configFile(2) });
     expect(second.statusCode).toBe(200);
     expect(second.json().status).toBe('unchanged');
+    // `status` (draft/published) is ignored by the server, so it is not part of the content either.
+    const republished = await app.inject({ method: 'POST', url: `${url}/versions`, headers: ADMIN, payload: { ...configFile(2), status: 'published' } });
+    expect(republished.json().status).toBe('unchanged');
 
     const changed = { ...configFile(2), title: 'Something else' };
     const conflict = await app.inject({ method: 'POST', url: `${url}/versions`, headers: ADMIN, payload: changed });
@@ -116,5 +119,13 @@ describe('publishing and rolling back versions', () => {
     expect(noToken.statusCode).toBe(401);
     const wrongFunnel = await app.inject({ method: 'POST', url: '/api/admin/funnels/other/versions', headers: ADMIN, payload: configFile(1) });
     expect(wrongFunnel.statusCode).toBe(400);
+  });
+
+  it('a hostile, absurdly nested upload is refused with 422, not a stack overflow', async () => {
+    const { app } = ctx;
+    let deep: unknown = {};
+    for (let i = 0; i < 1000; i++) deep = { x: deep };
+    const res = await app.inject({ method: 'POST', url: `${url}/versions`, headers: ADMIN, payload: { ...configFile(2), junk: deep } });
+    expect(res.statusCode).toBe(422);
   });
 });

@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { HttpError } from './errors.js';
 
@@ -13,10 +13,10 @@ import { HttpError } from './errors.js';
 export const SESSION_COOKIE = 'funnel_internal';
 export const SESSION_TTL_MS = 8 * 3600_000;
 
+/** Constant-time comparison that does not leak the length of the secret (both sides are hashed to 32 bytes). */
 function safeEqual(a: string, b: string): boolean {
-  const x = Buffer.from(a);
-  const y = Buffer.from(b);
-  return x.length === y.length && timingSafeEqual(x, y);
+  const digest = (s: string) => createHash('sha256').update(s).digest();
+  return timingSafeEqual(digest(a), digest(b));
 }
 
 export interface Auth {
@@ -24,6 +24,8 @@ export interface Auth {
   /** Cookie value "expiresAt.signature"; the signing key is derived from the access key (rotating it logs everyone out). */
   issue(): { value: string; maxAgeSeconds: number };
   isAuthorized(req: FastifyRequest): boolean;
+  /** Logged in through the browser (cookie only; the header is for scripts and is not a login check). */
+  hasSession(req: FastifyRequest): boolean;
   /** Fastify hook: 401 unless the request carries a valid session cookie or the access key header. */
   guard(req: FastifyRequest, reply: FastifyReply): Promise<void>;
 }
@@ -46,6 +48,7 @@ export function createAuth(accessKey: string, now: () => number = Date.now): Aut
       return { value: `${exp}.${sign(exp)}`, maxAgeSeconds: SESSION_TTL_MS / 1000 };
     },
     isAuthorized: (req) => auth.keyMatches(req.headers['x-admin-token']) || validCookie(req.cookies[SESSION_COOKIE]),
+    hasSession: (req) => validCookie(req.cookies[SESSION_COOKIE]),
     guard: async (req) => {
       if (!auth.isAuthorized(req)) throw new HttpError(401, 'unauthorized', 'Log in to the internal area (or send x-admin-token)');
     },
