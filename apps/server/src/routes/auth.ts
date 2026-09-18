@@ -21,7 +21,8 @@ export const authRoutes =
         path: '/api',
         httpOnly: true,
         sameSite: 'strict',
-        secure: req.protocol === 'https',
+        // Always Secure in production, even if a misconfigured proxy makes the request look like plain http.
+        secure: process.env.NODE_ENV === 'production' || req.protocol === 'https',
         maxAge: session.maxAgeSeconds,
       });
       return { authenticated: true };
@@ -32,5 +33,6 @@ export const authRoutes =
       return { authenticated: false };
     });
 
-    app.get('/auth/me', async (req) => ({ authenticated: auth.isAuthorized(req) }));
+    // Cookie only: answering for the x-admin-token header here would give an unlimited key-guessing oracle.
+    app.get('/auth/me', async (req) => ({ authenticated: auth.hasSession(req) }));
   };

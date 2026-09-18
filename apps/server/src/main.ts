@@ -26,10 +26,19 @@ const seed = seedIfEmpty(db, new VersionsService(db), seedPath);
 const app = await buildApp({
   db,
   adminToken,
-  logger: true,
-  // Number of trusted proxy hops (Fly.io = 1). "true" is accepted as 1 for convenience, never as "trust all".
+  // Request logs mask ids in URLs: a session id is enough to read that session's answers until it expires.
+  logger: {
+    serializers: {
+      req: (req: { method: string; url: string; ip: string }) => ({
+        method: req.method,
+        url: req.url.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ':id'),
+        remoteAddress: req.ip,
+      }),
+    },
+  },
+  // Number of trusted reverse proxies in front of the app (Railway and similar: 1). "true" means 1, never "trust all".
   trustProxy: process.env.TRUST_PROXY === 'true' ? 1 : Number(process.env.TRUST_PROXY ?? 0),
-  publicRateLimit: Number(process.env.PUBLIC_RATE_LIMIT ?? 3000),
+  publicRateLimit: Number(process.env.PUBLIC_RATE_LIMIT ?? 600),
   ...(existsSync(webDir) ? { webDir } : {}),
 });
 if (seed.seeded) app.log.info(seed, 'seeded initial funnel version');

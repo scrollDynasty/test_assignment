@@ -32,6 +32,28 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
+/** Nesting depth of a JSON value, computed without recursion (a hostile upload must not overflow the stack). */
+function jsonDepth(value: unknown): number {
+  let max = 0;
+  const stack: Array<[unknown, number]> = [[value, 1]];
+  while (stack.length > 0) {
+    const [v, d] = stack.pop() as [unknown, number];
+    if (v === null || typeof v !== 'object') continue;
+    max = Math.max(max, d);
+    for (const child of Object.values(v as Record<string, unknown>)) stack.push([child, d + 1]);
+  }
+  return max;
+}
+/** Real configs nest about 8 levels deep; anything far deeper is not a config. */
+const MAX_CONFIG_DEPTH = 32;
+
+/** The content that identifies a version: `status` (draft/published) is ignored by the server, so it is not content. */
+function contentOf(raw: unknown): unknown {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const { status: _status, ...content } = raw as Record<string, unknown>;
+  return content;
+}
+
 interface ReleaseRow {
   id: number;
   action: 'publish' | 'rollback';
@@ -56,6 +78,9 @@ export class VersionsService {
   ) {}
 
   upload(funnelId: string, raw: unknown): UploadOutcome {
+    if (jsonDepth(raw) > MAX_CONFIG_DEPTH) {
+      throw new HttpError(422, 'invalid_config', `Config is nested deeper than ${MAX_CONFIG_DEPTH} levels`);
+    }
     const validation = validateConfig(raw);
     if (!validation.ok) {
       throw new HttpError(422, 'invalid_config', 'Config failed validation', { errors: validation.errors, warnings: validation.warnings });
@@ -64,14 +89,17 @@ export class VersionsService {
     if (config.funnelId !== funnelId) {
       throw new HttpError(400, 'funnel_mismatch', `Config is for funnel "${config.funnelId}", not "${funnelId}"`);
     }
-    const hash = createHash('sha256').update(canonicalJson(raw)).digest('hex');
+    const sha = (v: unknown) => createHash('sha256').update(canonicalJson(v)).digest('hex');
+    const hash = sha(contentOf(raw));
+    // Rows written before `status` was excluded carry the hash of the whole file: accept that as "same content" too.
+    const legacyHash = sha(raw);
     // Check-then-insert inside one IMMEDIATE transaction: concurrent uploads of the same version cannot race to a 500.
     return this.db.transaction((): UploadOutcome => {
     const existing = this.db
       .prepare('SELECT config_hash FROM funnel_versions WHERE funnel_id = ? AND version = ?')
       .get(funnelId, config.version) as { config_hash: string } | undefined;
     if (existing) {
-      if (existing.config_hash === hash) return { status: 'unchanged', version: config.version, warnings: validation.warnings };
+      if (existing.config_hash === hash || existing.config_hash === legacyHash) return { status: 'unchanged', version: config.version, warnings: validation.warnings };
       throw new HttpError(409, 'version_conflict', `Version ${config.version} already exists with different content; bump "version"`);
     }
     this.db

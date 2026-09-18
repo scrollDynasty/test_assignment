@@ -57,4 +57,25 @@ describe('internal area access', () => {
     expect((await app.inject({ method: 'GET', url: analytics, headers: { cookie } })).statusCode).toBe(401);
     await app.close();
   });
+
+  it('"am I logged in" answers for the cookie only, so it cannot be used to test keys without a rate limit', async () => {
+    const { app } = await setup();
+    expect((await app.inject({ method: 'GET', url: '/api/auth/me', headers: ADMIN })).json()).toEqual({ authenticated: false });
+    await app.close();
+  });
+
+  it('state-changing internal requests from another site are rejected, even with a valid session cookie', async () => {
+    const { app } = await setup();
+    const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { key: 'test-token' } });
+    const cookie = String(login.headers['set-cookie']).split(';')[0] as string;
+    const rollbackUrl = `/api/admin/funnels/${FUNNEL}/rollback`;
+    const from = (headers: Record<string, string>) => app.inject({ method: 'POST', url: rollbackUrl, headers: { cookie, ...headers } });
+    expect((await from({ origin: 'https://evil.example' })).statusCode).toBe(403);
+    expect((await from({ 'sec-fetch-site': 'same-site' })).statusCode).toBe(403); // a sibling subdomain
+    expect((await from({ 'sec-fetch-site': 'cross-site' })).statusCode).toBe(403);
+    // Our own page (same origin) and CLI scripts (no Origin at all) pass the check and reach the handler.
+    expect((await from({ origin: 'http://localhost:80', host: 'localhost:80', 'sec-fetch-site': 'same-origin' })).statusCode).toBe(409); // nothing to roll back
+    expect((await app.inject({ method: 'POST', url: rollbackUrl, headers: ADMIN })).statusCode).toBe(409);
+    await app.close();
+  });
 });

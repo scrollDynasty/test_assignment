@@ -59,6 +59,8 @@ describe('public write API is rate limited per IP', () => {
       codes.push((await app.inject({ method: 'POST', url: '/api/events', payload: { events: [{}] } })).statusCode);
     }
     expect(codes).toEqual([200, 200, 200, 429]);
+    // Requests with the access key (traffic generator, demo scripts) are exempt: a load run never locks visitors out.
+    expect((await app.inject({ method: 'POST', url: '/api/events', headers: { 'x-admin-token': 'test-token' }, payload: { events: [{}] } })).statusCode).toBe(200);
     // Analytics (read-only) is not affected by the write limit.
     expect((await app.inject({ method: 'GET', url: '/api/health' })).statusCode).toBe(200);
     await app.close();

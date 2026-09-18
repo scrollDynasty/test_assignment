@@ -2,7 +2,7 @@ import fastifyCookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import { ZodError } from 'zod';
 import { createAuth } from './auth.js';
 import type { Db } from './db.js';
@@ -20,11 +20,11 @@ import { sessionRoutes } from './routes/sessions.js';
 export interface AppOptions {
   db: Db;
   adminToken: string;
-  logger?: boolean;
+  logger?: FastifyServerOptions['logger'];
   /** Directory with the built web app; when set, the server also serves the SPA. */
   webDir?: string;
   /**
-   * Number of reverse-proxy hops to trust for X-Forwarded-For (Fly.io: 1). Never `true`: that trusts every hop,
+   * Number of reverse-proxy hops to trust for X-Forwarded-For (one reverse proxy: 1). Never `true`: that trusts every hop,
    * so a client could spoof its IP with its own X-Forwarded-For header and bypass all rate limits.
    */
   trustProxy?: number;
@@ -39,6 +39,13 @@ export interface Services {
   sessions: SessionsService;
   events: EventsService;
   analytics: AnalyticsService;
+}
+
+/** Origin "https://a.b" vs Host "a.b[:443]": compared after URL normalisation (default ports dropped). */
+function sameHost(origin: string, host: string): boolean {
+  if (!URL.canParse(origin)) return false;
+  const o = new URL(origin);
+  return URL.canParse(`${o.protocol}//${host}`) && new URL(`${o.protocol}//${host}`).host === o.host;
 }
 
 export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
@@ -72,6 +79,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
         formAction: ["'self'"],
         baseUri: ["'self'"],
         objectSrc: ["'none'"],
+        fontSrc: ["'self'"],
       },
     },
     crossOriginEmbedderPolicy: false,
@@ -98,18 +106,36 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     opts.db.prepare('SELECT 1').get();
     return { ok: true };
   });
-  // Public write endpoints get a per-IP limit; generous enough for the traffic generator from one machine.
+  const auth = createAuth(opts.adminToken, opts.now);
+  // Public write endpoints get a per-IP limit sized for people, not for load tests; requests carrying the access key
+  // (the traffic generator, demo scripts) are exempt, so a load run never locks visitors out.
   await app.register(
     async (scope) => {
-      await scope.register(rateLimit, { max: opts.publicRateLimit ?? 3000, timeWindow: '1 minute' });
+      await scope.register(rateLimit, {
+        max: opts.publicRateLimit ?? 600,
+        timeWindow: '1 minute',
+        allowList: (req) => auth.keyMatches(req.headers['x-admin-token']),
+      });
       await scope.register(sessionRoutes(services));
       await scope.register(eventRoutes(services));
     },
     { prefix: '/api' },
   );
-  // Internal area (TZ: "внутренняя страница", "внутренний dashboard"): analytics and version management need a login.
-  const auth = createAuth(opts.adminToken, opts.now);
+  // Internal area: analytics and version management need a login.
   await app.register(fastifyCookie);
+  // CSRF defence in depth on top of SameSite=Strict: state-changing internal requests must come from our own origin.
+  // Modern browsers say so themselves in Sec-Fetch-Site (a sibling subdomain is "same-site", not "same-origin"); for
+  // browsers without it, Origin is compared with Host. CLI scripts send neither (they authenticate with the key header).
+  app.addHook('onRequest', async (req) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || !/^\/api\/(admin|auth)\//.test(req.url)) return;
+    const site = req.headers['sec-fetch-site'];
+    const origin = req.headers.origin;
+    const foreign =
+      site !== undefined ? site === 'cross-site' || site === 'same-site' : origin !== undefined && !sameHost(origin, req.host);
+    if (foreign) {
+      throw new HttpError(403, 'forbidden_origin', 'Cross-site request rejected');
+    }
+  });
   await app.register(authRoutes(auth), { prefix: '/api' });
   await app.register(analyticsRoutes(services, auth), { prefix: '/api' });
   await app.register(adminRoutes(services, opts.db, auth), { prefix: '/api/admin' });

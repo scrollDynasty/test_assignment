@@ -1,3 +1,4 @@
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { Services } from '../app.js';
@@ -23,6 +24,8 @@ const Query = z.object({
 export const analyticsRoutes =
   (services: Services, auth: Auth): FastifyPluginAsync =>
   async (app) => {
+    // Same limit as /api/admin: the endpoint accepts the key header, so key guessing must be slowed down here too.
+    await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
     app.get('/analytics', { preHandler: auth.guard }, async (req) => {
       const q = Query.parse(req.query);
       return services.analytics.report({
