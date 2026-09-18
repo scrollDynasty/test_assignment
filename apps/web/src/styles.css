@@ -1,9 +1,6 @@
 /*
- * Visual system.
- * Ground: paper with a faint sage tint (planning boards, printed schedules). Ink: green-black.
- * Accent: pine for actions and progress. Marker: a highlighter yellow, spent only on "what you chose"
- * (selected answers, the result label, the current row) so it always means the same thing.
- * Type: Geologica for headings and figures, Onest for text; both self-hosted with Cyrillic.
+ * Design tokens: ground, ink, accent (actions and progress), marker (only "what you chose": selected answers, the
+ * result label, the current table row). Geologica for headings and figures, Onest for text; both self-hosted.
  */
 :root {
   --ground: #f2f3ee;
@@ -259,16 +256,15 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
 
 /*
  * Step change = "dissolve": the answered screen evaporates (fades, blurs, drifts up a little and grows slightly),
- * then the next one condenses out of the same haze. No sideways movement and no progress bar filling up, so the
- * transition says "next" without saying "how many are left". Driven by the View Transitions API
- * (lib/transition.ts); the rest of the page (header, language switch) stays still.
+ * then the next one condenses out of the same haze. Driven by the View Transitions API (lib/transition.ts); the
+ * corner switches stay still, the progress line and the back link have their own names and animate on their own.
  */
 .step-slot { view-transition-name: step; }
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
 ::view-transition-group(step) { animation-duration: 0.62s; }
 ::view-transition-old(step) { animation: evaporate 0.3s cubic-bezier(0.4, 0, 1, 1) both; }
 ::view-transition-new(step) { animation: condense 0.42s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both; }
-/* "Reveal" (result CTA): the title stays put; only the button evaporates and the plan condenses in below it. */
+/* "Reveal" (result CTA): the step is not dissolved; the button evaporates and the plan condenses in below the title. */
 .vt-reveal .result .actions { view-transition-name: result-actions; }
 .vt-reveal::view-transition-old(step) { animation: none; opacity: 0; }
 .vt-reveal::view-transition-new(step) { animation: none; }
@@ -297,7 +293,7 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
 .body, .helper { color: var(--muted); margin: 0 0 8px; max-width: 58ch; font-size: 17px; line-height: 1.55; }
 
 /* The intro screen is the one place with a large headline. */
-.step:not(form):not(.result) h1 { font-size: clamp(34px, 5.2vw, 46px); line-height: 1.05; letter-spacing: -0.025em; margin-bottom: 18px; }
+.step.intro h1 { font-size: clamp(34px, 5.2vw, 46px); line-height: 1.05; letter-spacing: -0.025em; margin-bottom: 18px; }
 
 .options { display: grid; gap: 8px; margin: 28px 0 8px; }
 .option {
@@ -437,7 +433,8 @@ select, .token input, textarea {
   color: var(--ink);
 }
 select:focus, .token input:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.page button:not(.primary):not(.link):not(.lang button):not(.theme-toggle) {
+/* Secondary buttons of the internal pages. */
+.btn {
   min-height: 38px;
   padding: 0 14px;
   border: 1px solid var(--line-strong);
@@ -446,8 +443,8 @@ select:focus, .token input:focus, textarea:focus { outline: none; border-color: 
   font-size: 14px;
   font-weight: 500;
 }
-.page button:not(.primary):not(.link):hover:not(:disabled) { border-color: var(--ink); }
-.page button:disabled { opacity: 0.55; cursor: default; }
+.btn:hover:not(:disabled) { border-color: var(--ink); }
+.btn:disabled { opacity: 0.55; cursor: default; }
 .page .primary { min-height: 38px; padding: 0 16px; border-radius: var(--radius-sm); font-size: 14px; }
 
 section { margin-top: 44px; }

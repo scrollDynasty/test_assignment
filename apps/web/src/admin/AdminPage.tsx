@@ -116,6 +116,7 @@ export function AdminPage() {
                 {t('admin.active')} <span className="active-version">v{data.activeVersion ?? '—'}</span>
               </h2>
               <button
+                className="btn"
                 disabled={busy}
                 onClick={() => {
                   if (window.confirm(t('admin.rollbackConfirm'))) {
@@ -154,6 +155,7 @@ export function AdminPage() {
                     <td>
                       {v.version !== data.activeVersion && (
                         <button
+                          className="btn"
                           disabled={busy}
                           onClick={() =>
                             void run(
@@ -186,7 +188,7 @@ export function AdminPage() {
             />
             <textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={t('admin.paste')} rows={8} />
             <div className="row">
-              <button disabled={busy || !draft} onClick={() => void upload(false)}>{t('admin.upload')}</button>
+              <button className="btn" disabled={busy || !draft} onClick={() => void upload(false)}>{t('admin.upload')}</button>
               <button className="primary" disabled={busy || !draft} onClick={() => void upload(true)}>{t('admin.uploadPublish')}</button>
             </div>
           </section>

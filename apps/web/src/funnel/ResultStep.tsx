@@ -102,7 +102,7 @@ export function ResultStep({ step, sessionId, tracker, whenSaved, onRestart }: P
   const onCta = () => {
     if (!cta) return;
     tracker?.track('cta_clicked', step.id, { result_id: resultId, action: cta.action });
-    // Only the lower part changes: the button dissolves and the plan condenses in below the unchanged title.
+    // Only the lower part changes: the button dissolves and the plan condenses in below the title.
     if (cta.action === 'expand_recommendation') dissolve(() => setExpanded(true), 'reveal');
   };
 
