@@ -59,7 +59,14 @@ import type { VersionsService } from './versions.js';
  * Rates with a zero denominator are null.
  */
 
+/** Default "in progress" window; the report accepts another one (0 = every unfinished session is a drop-off). */
 export const IN_PROGRESS_WINDOW_MS = 30 * 60 * 1000;
+
+/** Report clock: "now" and the in-progress window. */
+interface Clock {
+  now: number;
+  windowMs: number;
+}
 const STEP_EVENTS = ['step_viewed', 'answer_submitted', 'step_completed'] as const;
 const RESULT_EVENTS = ['result_viewed', 'cta_clicked'] as const;
 const UNKNOWN_RESULT = 'unknown';
@@ -109,6 +116,7 @@ export class AnalyticsService {
 
   report(filters: AnalyticsFilters): AnalyticsReport {
     const now = this.now();
+    const clock: Clock = { now, windowMs: (filters.inProgressMinutes ?? 30) * 60 * 1000 };
     const versionRows = this.db
       .prepare('SELECT version, experiment_id AS experimentId FROM funnel_versions WHERE funnel_id = ? ORDER BY version')
       .all(filters.funnelId) as { version: number; experimentId: string }[];
@@ -124,13 +132,13 @@ export class AnalyticsService {
     const versions: VersionRow[] = versionRows.map((v) => ({
       version: v.version,
       experimentId: v.experimentId,
-      ...summarize(facts.filter((f) => f.version === v.version), now),
+      ...summarize(facts.filter((f) => f.version === v.version), clock),
     }));
 
     let selected: SelectedReport | null = null;
     if (selectedVersion !== null) {
       const config = this.versions.getConfig(filters.funnelId, selectedVersion);
-      selected = this.selectedReport(config, facts.filter((f) => f.version === selectedVersion), where, params, now);
+      selected = this.selectedReport(config, facts.filter((f) => f.version === selectedVersion), where, params, clock);
     }
 
     return {
@@ -140,6 +148,7 @@ export class AnalyticsService {
         version: selectedVersion,
         utmCampaign: filters.utmCampaign ?? null,
         includeOverrides: filters.includeOverrides,
+        inProgressMinutes: filters.inProgressMinutes ?? 30,
       },
       availableVersions: versionRows.map((v) => v.version),
       availableCampaigns: (
@@ -241,11 +250,11 @@ export class AnalyticsService {
     return [...facts.values()];
   }
 
-  private selectedReport(config: FunnelConfig, facts: SessionFacts[], where: string, params: Params, now: number): SelectedReport {
+  private selectedReport(config: FunnelConfig, facts: SessionFacts[], where: string, params: Params, clock: Clock): SelectedReport {
     const variantIds = Object.keys(config.experiment.variants).sort();
     const variants: Record<string, VariantReport> = {};
     for (const variant of variantIds) {
-      variants[variant] = variantReport(resolveVariant(config, variant), facts.filter((f) => f.variant === variant), now);
+      variants[variant] = variantReport(resolveVariant(config, variant), facts.filter((f) => f.variant === variant), clock);
     }
 
     const otherRows = this.db
@@ -302,11 +311,11 @@ export class AnalyticsService {
   }
 }
 
-function isInProgress(f: SessionFacts, now: number): boolean {
-  return !f.reached && f.expiresAt > now && f.lastTs > now - IN_PROGRESS_WINDOW_MS;
+function isInProgress(f: SessionFacts, { now, windowMs }: Clock): boolean {
+  return !f.reached && f.expiresAt > now && f.lastTs > now - windowMs;
 }
 
-function summarize(facts: SessionFacts[], now: number): SummaryMetrics {
+function summarize(facts: SessionFacts[], clock: Clock): SummaryMetrics {
   const started = facts.length;
   let reachedResult = 0;
   let ctaClicked = 0;
@@ -315,7 +324,7 @@ function summarize(facts: SessionFacts[], now: number): SummaryMetrics {
   for (const f of facts) {
     if (f.reached) reachedResult++;
     if (f.cta) ctaClicked++;
-    if (isInProgress(f, now)) inProgress++;
+    if (isInProgress(f, clock)) inProgress++;
     if (f.completedOnServer) serverCompleted++;
   }
   return {
@@ -330,8 +339,8 @@ function summarize(facts: SessionFacts[], now: number): SummaryMetrics {
   };
 }
 
-function variantReport(funnel: ResolvedFunnel, facts: SessionFacts[], now: number): VariantReport {
-  const summary = summarize(facts, now);
+function variantReport(funnel: ResolvedFunnel, facts: SessionFacts[], clock: Clock): VariantReport {
+  const summary = summarize(facts, clock);
   const position = new Map(funnel.sequence.map((id, i) => [id, i] as const));
   const resultStepIds = funnel.sequence.filter((id) => funnel.steps[id]?.type === 'result');
 
@@ -362,7 +371,7 @@ function variantReport(funnel: ResolvedFunnel, facts: SessionFacts[], now: numbe
     if (f.reached) {
       const key = f.resultId ?? UNKNOWN_RESULT;
       resultMix[key] = (resultMix[key] ?? 0) + 1;
-    } else if (!isInProgress(f, now)) {
+    } else if (!isInProgress(f, clock)) {
       const stepId = furthest >= 0 ? funnel.sequence[furthest] : undefined;
       if (stepId === undefined) beforeFirstStep++;
       else dropoff.set(stepId, (dropoff.get(stepId) ?? 0) + 1);
