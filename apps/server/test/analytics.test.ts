@@ -330,18 +330,19 @@ describe('TZ 7.1 test 5 — analytics over unique sessions', () => {
     expect(ab).toBeTruthy();
     if (!ab) return;
     expect(ab.metric).toBe('startToCta');
-    expect(ab.a).toMatchObject({ variant: 'A', sessions: 7, conversions: 1 });
+    // The A/B comparison uses finished sessions only: A has one session still in progress (7 started → 6 compared).
+    expect(ab.a).toMatchObject({ variant: 'A', sessions: 6, conversions: 1 });
     expect(ab.b).toMatchObject({ variant: 'B', sessions: 5, conversions: 2 });
-    expect(ab.diff).toBeCloseTo(0.4 - 1 / 7, 12);
-    // pooled 3/12: z = 0.25714 / sqrt(0.1875 * (1/7 + 1/5)) = 1.0142 → p ≈ 0.3105
-    expect(ab.pValue).toBeCloseTo(0.3105, 3);
+    expect(ab.diff).toBeCloseTo(0.4 - 1 / 6, 12);
+    // pooled 3/11: z = 0.23333 / sqrt(0.19835 * (1/6 + 1/5)) = 0.8652 → p ≈ 0.3869
+    expect(ab.pValue).toBeCloseTo(0.3869, 3);
     expect(ab.significant).toBe(false);
-    expect(ab.a.ci?.[0]).toBeLessThan(1 / 7);
-    expect(ab.a.ci?.[1]).toBeGreaterThan(1 / 7);
+    expect(ab.a.ci?.[0]).toBeLessThan(1 / 6);
+    expect(ab.a.ci?.[1]).toBeGreaterThan(1 / 6);
     expect(ab.diffCi?.[0]).toBeLessThan(0);
     expect(ab.diffCi?.[1]).toBeGreaterThan(ab.diff);
     expect(ab.mde).toBeGreaterThan(0);
-    // 7 vs 5 against 50/50: chi2 = 1/3, p = 0.5637.
+    // SRM checks the assignment itself, so it counts every randomized session, finished or not: 7 vs 5, p = 0.5637.
     expect(ab.srm).toMatchObject({ observed: { A: 7, B: 5 }, expectedShare: { A: 0.5, B: 0.5 }, ok: true });
     expect(ab.srm?.pValue).toBeCloseTo(0.5637, 3);
   });
@@ -379,7 +380,7 @@ describe('TZ 7.1 test 5 — analytics over unique sessions', () => {
     expectInvariant(a);
     // SRM ignores non-randomized sessions even when they are shown.
     expect(withOverrides.selected?.abTest?.srm?.observed).toEqual({ A: 7, B: 5 });
-    expect(withOverrides.selected?.abTest?.a.sessions).toBe(8);
+    expect(withOverrides.selected?.abTest?.a.sessions).toBe(7); // 8 started, one still in progress
   });
 
   it('duplicates and repeat views do not change any distinct-session number', async () => {

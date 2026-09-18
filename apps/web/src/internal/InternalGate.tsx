@@ -31,7 +31,7 @@ export function InternalGate({ children }: { children: ReactNode }) {
       setKey('');
       setStatus('in');
     } catch (e) {
-      setError(e instanceof ApiError && e.status === 401 ? t('login.invalid') : e instanceof ApiError && e.status === 429 ? t('login.tooMany') : String(e));
+      setError(e instanceof ApiError && e.status === 401 ? t('login.invalid') : e instanceof ApiError && e.status === 429 ? t('login.tooMany') : t('login.network'));
     } finally {
       setBusy(false);
     }
