@@ -1,13 +1,28 @@
+# Dependencies and build output
 node_modules/
 dist/
 *.tsbuildinfo
+coverage/
+
+# Local databases and backups (real session data, never committed)
 data/
+backups/
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Secrets: ADMIN_TOKEN and other env values live only in the environment
 .env
-coverage/
+.env.*
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editors, OS and local tooling
+.vscode/
+.idea/
 .DS_Store
-.claude/worktrees/
-backups/
+Thumbs.db
+.claude/

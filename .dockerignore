@@ -2,7 +2,16 @@ node_modules
 **/node_modules
 **/dist
 **/*.tsbuildinfo
+coverage
+# Local databases, backups and secrets must never reach the build context
 data
+backups
+**/*.db
+**/*.db-*
+.env
+.env.*
+**/*.log
 .git
 .claude
-*.db
+.vscode
+.idea
