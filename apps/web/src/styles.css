@@ -98,3 +98,7 @@ textarea { width: 100%; margin: 10px 0; font-family: ui-monospace, monospace; fo
 .message.error { background: #fdecea; color: var(--danger); }
 code { font-size: 12px; }
 @media (max-width: 520px) { .variant-grid { grid-template-columns: 1fr; } .bars-row { grid-template-columns: 110px 1fr 70px; } }
+.notice { background: #fff7e6; border: 1px solid #f5d9a8; border-radius: 10px; padding: 10px 14px; margin-top: 16px; }
+.notice .link { padding: 0; }
+.meta a { color: var(--muted); }
+details pre { max-height: 420px; overflow: auto; background: var(--bg); padding: 10px; border-radius: 8px; font-size: 12px; }

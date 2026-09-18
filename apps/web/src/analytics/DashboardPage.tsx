@@ -100,6 +100,17 @@ export function DashboardPage() {
       {error && <p className="error">{error}</p>}
       {!report && !error && <div className="spinner" />}
 
+      {report && selected && report.filters.inProgressMinutes > 0 && Object.values(selected.variants).some((v) => v.inProgress > 0) && (
+        <p className="notice">
+          {Object.values(selected.variants).reduce((s, v) => s + v.inProgress, 0)} sessions were active in the last{' '}
+          {report.filters.inProgressMinutes} minutes and are counted as <b>in progress</b>, not as drop-offs.{' '}
+          <button className="link" onClick={() => setFilter('in_progress_minutes', '0')}>
+            Count every unfinished session as a drop-off
+          </button>{' '}
+          (useful right after running the traffic generator).
+        </p>
+      )}
+
       {report && selected && (
         <>
           <section>
