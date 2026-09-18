@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type MouseEvent } from 'react';
-import { flushSync } from 'react-dom';
 import { useI18n } from '../i18n';
+import { viewTransition } from './transition';
 
 type Theme = 'light' | 'dark';
 const KEY = 'funnel:theme'; // also read by public/theme-init.js before the first paint
@@ -12,8 +12,12 @@ function currentTheme(): Theme {
   return set === 'light' || set === 'dark' ? set : systemTheme();
 }
 
+/** Browser UI colour (mobile address bar) follows the chosen theme, not only the system one. */
+const GROUND: Record<Theme, string> = { light: '#f2f3ee', dark: '#111512' };
+
 function applyTheme(theme: Theme) {
   document.documentElement.setAttribute('data-theme', theme);
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', GROUND[theme]));
   try {
     localStorage.setItem(KEY, theme);
   } catch {
@@ -40,32 +44,28 @@ export function ThemeToggle() {
   }, []);
 
   const toggle = useCallback((e: MouseEvent<HTMLButtonElement>) => {
-    const next: Theme = currentTheme() === 'dark' ? 'light' : 'dark';
-    const update = () => {
-      applyTheme(next);
-      setTheme(next);
-    };
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!('startViewTransition' in document) || reduced) {
-      update();
-      return;
-    }
     // Centre of the wave: the icon itself (also correct for keyboard activation, where there is no pointer).
     const r = e.currentTarget.getBoundingClientRect();
     const x = r.left + r.width / 2;
     const y = r.top + r.height / 2;
     const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
-
-    const root = document.documentElement;
-    root.classList.add('vt-theme');
-    const transition = document.startViewTransition(() => flushSync(update));
-    void transition.ready.then(() => {
-      root.animate(
-        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
-        { duration: 750, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', pseudoElement: '::view-transition-new(root)' },
-      );
-    });
-    void transition.finished.finally(() => root.classList.remove('vt-theme'));
+    viewTransition(
+      () => {
+        // Decided when the transition runs, not on click: a second click queued behind a running wave flips back.
+        const next: Theme = currentTheme() === 'dark' ? 'light' : 'dark';
+        applyTheme(next);
+        setTheme(next);
+      },
+      {
+        variant: 'theme',
+        onReady: () => {
+          document.documentElement.animate(
+            { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+            { duration: 750, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', pseudoElement: '::view-transition-new(root)' },
+          );
+        },
+      },
+    );
   }, []);
 
   const label = theme === 'dark' ? t('theme.toLight') : t('theme.toDark');

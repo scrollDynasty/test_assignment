@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useParams } from 'react-router-dom';
 import { isInteractive } from '@funnel/shared';
 import { ResultStep } from './ResultStep';
@@ -18,7 +18,6 @@ export function FunnelPage() {
   const { load, step, progress, tracker, error } = view;
   const session = load.kind === 'ready' ? load.session : null;
   const currentStepId = session?.state.currentStepId;
-  const depth = session?.state.history.length ?? 0;
   const shellRef = useRef<HTMLDivElement>(null);
   useSwipeBack(shellRef, view.canGoBack && step?.type !== 'result', view.back);
 
@@ -47,13 +46,14 @@ export function FunnelPage() {
     if (navId > 1) document.querySelector<HTMLElement>('.step h1')?.focus();
   }, [navId]);
 
-  if (load.kind === 'loading') return <Shell shellRef={shellRef}><div className="spinner" /></Shell>;
+  if (load.kind === 'loading') return <Shell shellRef={shellRef}><div className="spinner" role="status" aria-label={t('funnel.loading')} /></Shell>;
   if (load.kind === 'error') {
     return (
       <Shell shellRef={shellRef}>
         <div className="step">
           <h1>{t('funnel.loadError')}</h1>
-          <p className="body">{load.message}</p>
+          {/* Visitors get a translated, actionable message; the raw technical one only in debug mode. */}
+          <p className="body">{debug ? load.message : t('funnel.loadErrorHelp')}</p>
           <div className="actions">
             <button className="primary" onClick={view.retryLoad}>{t('funnel.tryAgain')}</button>
           </div>
@@ -65,19 +65,28 @@ export function FunnelPage() {
 
   const answer = isInteractive(step) ? session.state.answers[step.input.name] : undefined;
   const common = { initial: answer, onSubmit: view.submit, onChange: view.clearError, invalid: Boolean(error) && error !== 'session_gone' };
+  // TZ: progress counts only the steps available to this user (engine: computeProgress). Shown as a thin line with no
+  // numbers — the visitor sees that they are moving, not how many questions remain; a branch that opens a question
+  // makes the line grow a little slower instead of turning "2 of 6" into "2 of 7".
+  const showProgress = progress !== null && progress.count > 0 && isInteractive(step);
+  const fill = showProgress ? Math.min(1, Math.max(0, (progress.index - 0.5) / progress.count)) : 0;
 
   return (
     <Shell shellRef={shellRef}>
-      {/* No "question N of M" on purpose: visitors do not see how many steps remain (a product decision, see
-          WORKLOG). Progress is still computed by the engine and sent with step_viewed for analytics.
-          No visible Back button either: back is a swipe right (useSwipeBack) or the browser's own Back. This button
-          stays for keyboard and screen-reader users: invisible until it receives focus (like a skip link). */}
-      {view.canGoBack && step.type !== 'result' && (
-        <button className="back-a11y" onClick={view.back}>{t('funnel.back')}</button>
+      {showProgress && (
+        <div className="progress" role="progressbar" aria-label={t('funnel.progressLabel')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fill * 100)}>
+          <div style={{ width: `${fill * 100}%` }} />
+        </div>
       )}
+      {/* Back: a small link on mouse/trackpad devices; on touch screens a swipe right (useSwipeBack), and the button is
+          shown only when it receives keyboard focus (skip-link pattern). The browser's own Back works everywhere. */}
+      {view.canGoBack && step.type !== 'result' && (
+        <button className="back-link" onClick={view.back}>{t('funnel.back')}</button>
+      )}
+      <SwipeHint active={view.canGoBack && step.type !== 'result'} />
 
-      {/* key: remount per navigation so each step starts from its saved answer */}
-      <div key={`${currentStepId}:${depth}`} className="step-slot">
+      {/* key: remount per navigation (also when the server copy is adopted) so each step starts from its saved answer */}
+      <div key={navId} className="step-slot">
         {step.type === 'info' && <InfoStep step={step} {...common} />}
         {step.type === 'single-select' && <SingleSelectStep step={step} {...common} />}
         {step.type === 'multi-select' && <MultiSelectStep step={step} {...common} />}
@@ -100,6 +109,33 @@ export function FunnelPage() {
       )}
       {debug && <footer className="meta">{t('funnel.meta', { version: session.version, variant: session.variant })}</footer>}
     </Shell>
+  );
+}
+
+/**
+ * One-time hint on touch screens, the first time going back is possible: a short note plus a small "peek" of the
+ * step, so the swipe that replaces a Back button can be discovered. Never shown again after that (localStorage).
+ */
+function SwipeHint({ active }: { active: boolean }) {
+  const { t } = useI18n();
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (!active || !window.matchMedia('(pointer: coarse)').matches) return;
+    try {
+      if (window.localStorage.getItem('funnel:swipe-hint') === '1') return;
+      window.localStorage.setItem('funnel:swipe-hint', '1');
+    } catch {
+      return; // no storage: better no hint than the same hint on every step
+    }
+    setShown(true);
+    const timer = window.setTimeout(() => setShown(false), 4200);
+    return () => window.clearTimeout(timer);
+  }, [active]);
+  if (!shown) return null;
+  return (
+    <p className="swipe-hint" role="status">
+      {t('funnel.swipeHint')}
+    </p>
   );
 }
 

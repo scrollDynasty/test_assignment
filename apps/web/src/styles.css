@@ -13,7 +13,7 @@
   --muted: #5b665e;
   --faint: #8a948c;
   --line: #d8ddd3;
-  --line-strong: #b9c1b5;
+  --line-strong: #7c867e; /* control borders: ≥ 3:1 on every surface (WCAG 1.4.11) */
   --accent: #1e5b47;
   --accent-hover: #174a3a;
   --accent-ink: #ffffff;
@@ -55,7 +55,7 @@
     --muted: #a0aba2;
     --faint: #748077;
     --line: #2b332e;
-    --line-strong: #56625a;
+    --line-strong: #6e7a72;
     --accent: #7cc9a9;
     --accent-hover: #97d7bc;
     --accent-ink: #0e1a14;
@@ -81,7 +81,7 @@
   --muted: #a0aba2;
   --faint: #748077;
   --line: #2b332e;
-  --line-strong: #56625a;
+  --line-strong: #6e7a72;
   --accent: #7cc9a9;
   --accent-hover: #97d7bc;
   --accent-ink: #0e1a14;
@@ -100,7 +100,7 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-height: 100vh; background: var(--ground); color: var(--ink); }
+body { margin: 0; min-height: 100vh; min-height: 100svh; background: var(--ground); color: var(--ink); }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
@@ -158,7 +158,7 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
  * (the circle itself is animated from lib/theme.tsx, where the switch's position is known).
  * During it the page is one flat picture: the step and result names are switched off, so nothing else moves.
  */
-.vt-theme .step-slot, .vt-theme .result .actions { view-transition-name: none; }
+.vt-theme .step-slot, .vt-theme .progress > div, .vt-theme .back-link { view-transition-name: none; }
 .vt-theme::view-transition-old(root), .vt-theme::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
 .vt-theme::view-transition-new(root) { z-index: 1; }
 
@@ -166,7 +166,6 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
 .primary {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
   min-height: 48px;
   padding: 0 24px;
   border: none;
@@ -190,7 +189,7 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
    Public funnel
    ============================================================ */
 /* The whole screen is the swipe area (swipe right = back); vertical scrolling stays native. */
-.funnel-shell { position: relative; min-height: 100vh; display: flex; flex-direction: column; touch-action: pan-y; }
+.funnel-shell { position: relative; min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; touch-action: pan-y pinch-zoom; }
 /* Theme and language switches, pinned to the corner: they take no space, so the question sits in the true centre. */
 .funnel-head {
   position: absolute;
@@ -214,20 +213,49 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
   padding: 72px 16px 10vh;
 }
 
-/* Back for keyboard / screen-reader users: off-screen until focused, then shown top-left (skip-link pattern). */
-.back-a11y {
+/* Progress: a hairline at the very top, no numbers. Its own transition name, so it grows during the dissolve. */
+.progress { position: fixed; inset: 0 0 auto; height: 3px; z-index: 2; background: transparent; }
+.progress > div { height: 100%; background: var(--accent); border-radius: 0 2px 2px 0; view-transition-name: progress; transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/*
+ * Back link. Mouse and trackpad: a quiet text link in the top-left corner. Touch: swipe instead, and the link stays
+ * off-screen until it receives keyboard focus (skip-link pattern), so the touch layout stays clean.
+ */
+.back-link {
   position: absolute;
   left: clamp(16px, 4vw, 40px);
   top: 18px;
-  transform: translateY(-200%);
-  padding: 6px 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: var(--raised);
-  color: var(--ink);
+  z-index: 1;
+  padding: 6px 2px;
+  border: none;
+  background: none;
+  color: var(--muted);
   font-size: 14px;
 }
-.back-a11y:focus-visible { transform: none; }
+.back-link:hover { color: var(--ink); }
+.back-link { view-transition-name: back-link; } /* fades in with the step instead of popping */
+@media not ((hover: hover) and (pointer: fine)) {
+  .back-link { transform: translateY(-300%); }
+  .back-link:focus-visible { transform: none; padding: 6px 12px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--raised); color: var(--ink); }
+}
+
+/* One-time swipe hint (touch only) and a small peek of the step that shows which way it moves. */
+.swipe-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--ground);
+  font-size: 14px;
+  white-space: nowrap;
+  animation: fade-in 0.3s ease both, fade-in 0.4s ease 3.8s reverse forwards;
+}
+.funnel-shell:has(.swipe-hint) .step-slot { animation: peek 0.9s cubic-bezier(0.3, 0, 0.2, 1) 0.6s 1; }
+@keyframes peek { 40% { transform: translateX(14px); } }
 
 /*
  * Step change = "dissolve": the answered screen evaporates (fades, blurs, drifts up a little and grows slightly),
@@ -246,6 +274,11 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
 .vt-reveal::view-transition-new(step) { animation: none; }
 ::view-transition-old(result-actions) { animation: evaporate 0.3s cubic-bezier(0.4, 0, 1, 1) both; }
 ::view-transition-new(result-actions) { animation: condense 0.42s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both; }
+/* Going back plays the same dissolve sideways, in the direction of the swipe: out to the right, in from the left. */
+.vt-back::view-transition-old(step) { animation-name: evaporate-back; }
+.vt-back::view-transition-new(step) { animation-name: condense-back; }
+@keyframes evaporate-back { to { opacity: 0; filter: blur(12px); transform: translateX(32px); } }
+@keyframes condense-back { from { opacity: 0; filter: blur(10px); transform: translateX(-20px); } }
 @keyframes evaporate {
   to { opacity: 0; filter: blur(12px); transform: translateY(-14px) scale(1.02); }
 }
@@ -359,7 +392,6 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
 .recommendations li::before { content: counter(rec, decimal-leading-zero); font-family: var(--font-display); font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
 
 .meta { color: var(--faint); font-size: 12px; margin-top: 48px; }
-.meta a { color: inherit; }
 
 /* ============================================================
    Internal area (analytics, versions)
@@ -505,4 +537,18 @@ details pre { max-height: 420px; overflow: auto; margin: 10px 0 0; padding: 14px
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* Windows High Contrast / forced colors: backgrounds are overridden, so the checked state needs system colours. */
+@media (forced-colors: active) {
+  .option input:checked { background: Highlight; border-color: Highlight; }
+  .option input[type='radio']:checked::after { background: HighlightText; }
+  .option input[type='checkbox']:checked::after { border-color: HighlightText; }
+}
+
+/* Touch: the small corner controls get finger-sized hit areas (WCAG 2.5.8). */
+@media (pointer: coarse) {
+  .lang button { padding: 8px 12px; }
+  .theme-toggle { width: 40px; height: 40px; }
+  .result .link { padding: 10px 0; }
 }

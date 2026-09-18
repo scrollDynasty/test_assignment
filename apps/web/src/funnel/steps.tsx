@@ -114,7 +114,6 @@ export function NumberStep({ step, initial, onSubmit, onChange, invalid }: StepP
           {...invalidProps(invalid)}
           type="number"
           inputMode="numeric"
-          autoFocus
           min={step.input.min}
           max={step.input.max}
           step={step.input.step}

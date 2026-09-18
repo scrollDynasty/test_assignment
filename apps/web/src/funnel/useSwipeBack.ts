@@ -68,7 +68,12 @@ export function useSwipeBack(areaRef: RefObject<HTMLElement | null>, enabled: bo
       const dx = t ? t.clientX - startX : 0;
       if (horizontal && dx >= THRESHOLD) {
         // Keep the dragged look: the view transition snapshots it and dissolves it from where the finger left it.
+        // If nothing navigated (e.g. the browser refused), the step is still on screen: put it back.
+        const el = target();
         onBack();
+        setTimeout(() => {
+          if (el?.isConnected) reset(true);
+        }, 900);
         return;
       }
       reset(true);
