@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { v5 as uuidv5 } from 'uuid';
 import {
   computeResult,
@@ -46,8 +46,22 @@ export interface SessionRow {
   expires_at: number;
 }
 
+/**
+ * A uuid namespace derived from a server secret. Session ids made from a client's idempotency key live in it, so the
+ * client cannot predict (and therefore cannot shop for) the id that its A/B variant is hashed from.
+ */
+export function sessionIdNamespace(secret: string): string {
+  const b = createHmac('sha256', secret).update('funnel-runtime/session-ids').digest().subarray(0, 16);
+  b[6] = ((b[6] as number) & 0x0f) | 0x40;
+  b[8] = ((b[8] as number) & 0x3f) | 0x80;
+  const h = b.toString('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 export interface CreateSessionInput {
   funnelId: string;
+  /** Client-generated uuid, reused on retries: the same key always yields the same session (no duplicate start). */
+  idempotencyKey?: string | undefined;
   utm: Utm;
   variantOverride?: string | undefined;
   /** Page query; the override parameter name comes from the active version's config. */
@@ -61,15 +75,26 @@ export class SessionsService {
     private readonly db: Db,
     private readonly versions: VersionsService,
     private readonly now: () => number = Date.now,
+    private readonly idNamespace: string = sessionIdNamespace(randomUUID()),
   ) {}
 
-  /** New sessions always start on the currently active version; version and variant are pinned for life. */
-  create(input: CreateSessionInput): SessionDto {
+  /**
+   * New sessions always start on the currently active version; version and variant are pinned for life.
+   * With an idempotency key, a retried request (the response was lost) returns the session already created for that
+   * key instead of starting a second one, which would inflate "started" and the A/B denominator.
+   */
+  create(input: CreateSessionInput): { session: SessionDto; created: boolean } {
+    const id = input.idempotencyKey ? uuidv5(input.idempotencyKey, this.idNamespace) : randomUUID();
+    const existing = input.idempotencyKey ? this.findRow(id) : undefined;
+    if (existing) {
+      if (existing.funnel_id !== input.funnelId) throw new HttpError(409, 'idempotency_conflict', 'Key already used for another funnel');
+      return { session: this.get(id), created: false };
+    }
+
     const version = this.versions.activeVersion(input.funnelId);
     if (version === null) throw notFound(`Funnel ${input.funnelId}`);
     const config = this.versions.getConfig(input.funnelId, version);
 
-    const id = randomUUID();
     const variants = config.experiment.variants;
     const requested = input.variantOverride ?? input.query?.[config.experiment.overrideQueryParam ?? 'variant'];
     // Object.hasOwn: user input must never match inherited keys like "toString" or "__proto__".
@@ -124,7 +149,7 @@ export class SessionsService {
           row.utm_source, row.utm_medium, row.utm_campaign, now, now);
     })();
 
-    return this.toDto(row, funnel);
+    return { session: this.toDto(row, funnel), created: true };
   }
 
   get(id: string): SessionDto {

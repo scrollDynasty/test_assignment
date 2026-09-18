@@ -14,6 +14,7 @@ import {
 import { ApiError, api } from '../lib/api';
 import { storage } from '../lib/storage';
 import { dissolve } from '../lib/transition';
+import { uuid } from '../lib/uuid';
 import { createTracker, type Tracker } from '../lib/tracker';
 
 const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'] as const;
@@ -130,8 +131,14 @@ export function useFunnel(funnelId: string): FunnelView {
           const v = params.get(k);
           if (v) utm[k] = v;
         }
-        session = await api.createSession({ funnelId, utm, query });
+        // One idempotency key per visit, kept until the session is stored: if the response is lost and the page
+        // retries (Try again, refresh), the server returns the same session instead of counting a second start.
+        const createKey = `${sessionKey}:create`;
+        const idempotencyKey = storage.getJson<string>(createKey) ?? uuid();
+        storage.setJson(createKey, idempotencyKey);
+        session = await api.createSession({ funnelId, idempotencyKey, utm, query });
         storage.setJson(sessionKey, { sessionId: session.sessionId });
+        storage.remove(createKey);
       }
       return session;
     }
@@ -371,6 +378,7 @@ export function useFunnel(funnelId: string): FunnelView {
       storage.remove(`funnel:seq:${old}`);
     }
     storage.remove(sessionKey);
+    storage.remove(`${sessionKey}:create`);
     const url = new URL(window.location.href);
     url.searchParams.delete('step');
     window.history.replaceState(null, '', `${url.pathname}${url.search}`);

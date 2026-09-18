@@ -12,6 +12,7 @@ const utmValue = z
 
 const CreateBody = z.object({
   funnelId: z.string().min(1).max(128),
+  idempotencyKey: z.uuid().optional(),
   utm: z
     .object({ utm_source: utmValue, utm_medium: utmValue, utm_campaign: utmValue, utm_content: utmValue, utm_term: utmValue })
     .optional(),
@@ -37,13 +38,14 @@ export const sessionRoutes =
   async (app) => {
     app.post('/sessions', async (req, reply) => {
       const body = CreateBody.parse(req.body);
-      const session = services.sessions.create({
+      const { session, created } = services.sessions.create({
         funnelId: body.funnelId,
+        idempotencyKey: body.idempotencyKey,
         utm: body.utm ?? {},
         variantOverride: body.variantOverride,
         query: body.query ?? {},
       });
-      return reply.status(201).send(session);
+      return reply.status(created ? 201 : 200).send(session);
     });
 
     app.get('/sessions/:id', async (req) => {
