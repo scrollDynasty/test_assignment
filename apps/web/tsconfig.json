@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "paths": { "@funnel/shared": ["../../packages/shared/src/index.ts"] },
+    "allowImportingTsExtensions": false
+  },
+  "include": ["src", "vite.config.ts"]
+}

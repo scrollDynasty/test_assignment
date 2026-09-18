@@ -9,3 +9,4 @@ data/
 .env
 coverage/
 .DS_Store
+.claude/worktrees/
