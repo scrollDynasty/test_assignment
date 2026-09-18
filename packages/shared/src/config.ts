@@ -190,6 +190,4 @@ export interface ResolvedFunnel {
   events: EventsConfig;
 }
 
-export function isInteractive(step: Step): step is InteractiveStep {
-  return step.type === 'single-select' || step.type === 'multi-select' || step.type === 'number';
-}
+export { isInteractive } from './steps.js';

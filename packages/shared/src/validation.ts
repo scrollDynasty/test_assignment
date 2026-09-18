@@ -1,5 +1,6 @@
 import { computeVisibility, type SessionState } from './engine.js';
-import { isInteractive, type AnswerValue, type InteractiveStep, type ResolvedFunnel } from './config.js';
+import type { AnswerValue, InteractiveStep, ResolvedFunnel } from './config.js';
+import { isInteractive } from './steps.js';
 
 export type AnswerErrorCode =
   | 'required'

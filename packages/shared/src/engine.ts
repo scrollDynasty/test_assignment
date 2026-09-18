@@ -1,5 +1,6 @@
 import { evaluateCondition } from './conditions.js';
-import { isInteractive, type Answers, type ResolvedFunnel, type Step } from './config.js';
+import type { Answers, ResolvedFunnel, Step } from './config.js';
+import { isInteractive } from './steps.js';
 
 export interface SessionState {
   /** Raw answers keyed by input name. May contain answers of steps that are currently hidden. */
