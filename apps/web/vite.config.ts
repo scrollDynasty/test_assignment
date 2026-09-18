@@ -5,7 +5,8 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: { '@funnel/shared': fileURLToPath(new URL('../../packages/shared/src/index.ts', import.meta.url)) },
+    // The browser gets the zod-free entry of the shared package (see packages/shared/src/client.ts).
+    alias: { '@funnel/shared': fileURLToPath(new URL('../../packages/shared/src/client.ts', import.meta.url)) },
   },
   server: { port: 5173, proxy: { '/api': 'http://localhost:3000' } },
   build: { outDir: 'dist', sourcemap: false },

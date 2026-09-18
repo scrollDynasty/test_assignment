@@ -9,7 +9,7 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "types": ["vite/client"],
-    "paths": { "@funnel/shared": ["../../packages/shared/src/index.ts"] },
+    "paths": { "@funnel/shared": ["../../packages/shared/src/client.ts"] },
     "allowImportingTsExtensions": false
   },
   "include": ["src", "vite.config.ts"]
