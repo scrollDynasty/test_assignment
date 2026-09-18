@@ -128,6 +128,10 @@ class User {
     const { resultId, result } = await http<{ resultId: string; result: { cta?: { action: string } } }>('POST', `/api/sessions/${this.session.sessionId}/result`);
     this.emit('result_viewed', this.session.state.currentStepId, { result_id: resultId });
     this.emit('cta_clicked', this.session.state.currentStepId, { result_id: resultId, action: result.cta?.action ?? 'expand_recommendation' });
+    // Like the web client: the v3 event only when the session's pinned version declares it.
+    if (this.session.funnel.events.allowed.some((e) => e.name === 'recommendation_expanded')) {
+      this.emit('recommendation_expanded', this.session.state.currentStepId, { result_id: resultId, action: result.cta?.action ?? 'expand_recommendation', source: 'result_cta' });
+    }
     await this.flush();
     return resultId;
   }
