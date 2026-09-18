@@ -43,22 +43,34 @@ function fail(step: InteractiveStep, code: AnswerErrorCode, generic: string): An
 }
 
 function isEmpty(raw: unknown): boolean {
-  return raw === undefined || raw === null || raw === '' || (Array.isArray(raw) && raw.length === 0);
+  return raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '') || (Array.isArray(raw) && raw.length === 0);
 }
+
+/** A question must be answered to move past it only when the config marks it as required. */
+export function isRequired(step: InteractiveStep): boolean {
+  return step.validation?.required === true;
+}
+
+const NUMBER_TEXT = /^-?\d+(\.\d+)?$/;
 
 /** Validates and normalizes one answer. The same function runs in the browser and on the server. */
 export function validateAnswer(step: InteractiveStep, raw: unknown): AnswerCheck {
-  const required = step.validation?.required ?? false;
   if (isEmpty(raw)) {
+    if (!isRequired(step)) return { ok: true, value: undefined };
     if (step.type === 'multi-select' && (step.validation?.minSelections ?? 0) > 0) {
       return fail(step, 'minSelections', 'Choose at least one option.');
     }
-    return required ? fail(step, 'required', 'This field is required.') : { ok: true, value: undefined };
+    return fail(step, 'required', 'This field is required.');
   }
 
   switch (step.type) {
     case 'number': {
-      const value = typeof raw === 'string' ? Number(raw.trim()) : raw;
+      let value: unknown = raw;
+      if (typeof raw === 'string') {
+        const text = raw.trim();
+        if (!NUMBER_TEXT.test(text)) return fail(step, 'type', 'Enter a number.');
+        value = Number(text);
+      }
       if (typeof value !== 'number' || !Number.isFinite(value)) return fail(step, 'type', 'Enter a number.');
       const { min, max, step: stepSize } = step.input;
       if (min !== undefined && value < min) return fail(step, 'min', `Enter a value of at least ${min}.`);
@@ -106,7 +118,11 @@ export interface StateError {
 /**
  * Server-side check of a client-submitted state against the session's pinned version:
  * every answer belongs to a step of this version and is valid, and the current step is reachable,
- * i.e. every visible question before it has an answer. Returns the normalized state on success.
+ * i.e. every visible required question before it has an answer. Returns the normalized state.
+ *
+ * History is not trusted: navigation is linear over visible steps, so the only valid back-stack is
+ * "visible steps before the current one". The server rebuilds it, so a stale or tampered history can
+ * never send Back to a hidden or future step.
  */
 export function validateState(
   funnel: ResolvedFunnel,
@@ -131,24 +147,21 @@ export function validateState(
     else if (check.value !== undefined) answers[name] = check.value;
   }
 
-  for (const id of [...state.history, state.currentStepId]) {
-    if (!funnel.sequence.includes(id)) errors.push({ code: 'unknown_step', detail: id });
-  }
+  if (!funnel.sequence.includes(state.currentStepId)) errors.push({ code: 'unknown_step', detail: state.currentStepId });
   if (errors.length > 0) return { ok: false, errors };
 
   const { visibleSteps } = computeVisibility(funnel, answers);
   if (!visibleSteps.includes(state.currentStepId)) {
     return { ok: false, errors: [{ code: 'step_not_reachable', detail: `${state.currentStepId} is hidden` }] };
   }
-  const currentPos = funnel.sequence.indexOf(state.currentStepId);
-  for (const id of visibleSteps) {
-    if (funnel.sequence.indexOf(id) >= currentPos) break;
+  const history = visibleSteps.slice(0, visibleSteps.indexOf(state.currentStepId));
+  for (const id of history) {
     const step = funnel.steps[id];
-    if (step && isInteractive(step) && answers[step.input.name] === undefined) {
+    if (step && isInteractive(step) && isRequired(step) && answers[step.input.name] === undefined) {
       errors.push({ code: 'step_not_reachable', detail: `${state.currentStepId} requires an answer to ${id}` });
     }
   }
   if (errors.length > 0) return { ok: false, errors };
 
-  return { ok: true, state: { answers, history: [...state.history], currentStepId: state.currentStepId } };
+  return { ok: true, state: { answers, history, currentStepId: state.currentStepId } };
 }

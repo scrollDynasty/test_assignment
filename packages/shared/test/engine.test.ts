@@ -7,6 +7,8 @@ import {
   filterEventProperties,
   initialState,
   nextStepId,
+  resolveVariant,
+  FunnelConfigSchema,
   validateAnswer,
   validateConfig,
   validateState,
@@ -42,6 +44,16 @@ describe('validateConfig', () => {
     ['override of a missing step', (c: LooseJson) => { c.experiment.variants.B.stepOverrides.ghost = { content: {} }; }, 'stepOverrides.ghost'],
     ['rule pointing to a missing result', (c: LooseJson) => { c.resultRules[0].resultId = 'ghost'; }, 'resultRules.0.resultId'],
     ['default result missing', (c: LooseJson) => { c.defaultResultId = 'ghost'; }, 'defaultResultId'],
+    // Found by code review: rules must hold for what a variant shows after overrides, not just the base steps.
+    ['override turning a question into a second result step', (c: LooseJson) => { c.experiment.variants.B.stepOverrides.team_size = { type: 'result' }; }, 'exactly one result step'],
+    ['override reusing another input name', (c: LooseJson) => { c.experiment.variants.B.stepOverrides.team_size = { input: { name: 'work_mode' } }; }, 'is asked twice'],
+    ['override adding a forward-looking branch', (c: LooseJson) => { c.experiment.variants.B.stepOverrides.team_size = { visibleWhen: { answer: 'tool_count', operator: 'gte', value: 3 } }; }, 'is not asked before "team_size"'],
+    ['override removing options the rules rely on', (c: LooseJson) => { c.experiment.variants.B.stepOverrides.work_mode = { input: { options: [{ value: 'remote', label: 'Remote' }] } }; }, 'unknown option "hybrid"'],
+    ['condition with a misspelt option', (c: LooseJson) => { c.steps.office_days.visibleWhen.value = ['hybrd', 'office']; }, 'expects an array of options'],
+    ['in with a scalar value', (c: LooseJson) => { c.steps.office_days.visibleWhen.value = 'hybrid'; }, 'expects an array of options'],
+    ['numeric comparison with a string', (c: LooseJson) => { c.resultRules[1].when = { answer: 'team_size', operator: 'gte', value: '15' }; }, 'expects a number'],
+    ['contains on a single-select answer', (c: LooseJson) => { c.resultRules[1].when = { answer: 'work_mode', operator: 'contains', value: 'hybrid' }; }, 'only valid for multi-select'],
+    ['a conditional result step', (c: LooseJson) => { c.steps.result.visibleWhen = { answer: 'work_mode', operator: 'eq', value: 'office' }; }, 'must always be reachable'],
   ] as const)('rejects a config with %s', (_label, mutate, expected) => {
     const result = validateConfig(mutated(1, mutate));
     expect(result.ok).toBe(false);
@@ -67,6 +79,11 @@ describe('evaluateCondition', () => {
     [{ answer: 'missing', operator: 'neq', value: 'x' }, false],
     [{ answer: 'missing', operator: 'not_in', value: ['x'] }, false],
     [{ not: { answer: 'missing', operator: 'exists' } }, true],
+    [{ answer: 'missing', operator: 'exists' }, false],
+    // Three-valued logic: not(unknown) stays unknown, so an unanswered question never opens a branch.
+    [{ not: { answer: 'missing', operator: 'eq', value: 'x' } }, false],
+    [{ any: [{ answer: 'missing', operator: 'eq', value: 1 }, { answer: 'mode', operator: 'eq', value: 'hybrid' }] }, true],
+    [{ not: { all: [{ answer: 'missing', operator: 'eq', value: 1 }, { answer: 'mode', operator: 'eq', value: 'remote' }] } }, true],
     [{ all: [{ answer: 'mode', operator: 'eq', value: 'hybrid' }, { answer: 'hours', operator: 'gte', value: 20 }] }, false],
     [{ any: [{ answer: 'mode', operator: 'eq', value: 'remote' }, { answer: 'hours', operator: 'gte', value: 10 }] }, true],
   ])('%j -> %s', (condition, expected) => {
@@ -128,8 +145,17 @@ describe('branching, navigation and progress', () => {
     const { visibleSteps, effectiveAnswers } = computeVisibility(a, answers);
     expect(visibleSteps).not.toContain('security_constraints');
     expect(effectiveAnswers.security_constraints).toBeUndefined();
-    expect(computeResult(a, answers)).not.toBe('regulated_scale');
-    expect(computeResult(a, { ...answers, priorities: ['compliance'] })).toBe('regulated_scale');
+
+    // A rule that looks ONLY at the hidden answer proves it is ignored (with raw answers it would match).
+    const raw = rawConfig(3) as LooseJson;
+    raw.resultRules[0].when = { answer: 'security_constraints', operator: 'in', value: ['strict', 'regulated'] };
+    const onlyHidden = resolveVariant(FunnelConfigSchema.parse(raw), 'A');
+    expect(computeResult(onlyHidden, answers)).not.toBe('regulated_scale');
+    expect(computeResult(onlyHidden, { ...answers, priorities: ['compliance'] })).toBe('regulated_scale');
+  });
+
+  it('rejects an unknown current step instead of silently restarting', () => {
+    expect(() => nextStepId(funnel(1, 'A'), {}, 'ghost')).toThrow();
   });
 
   it('initial state starts at the first visible step', () => {
@@ -169,6 +195,12 @@ describe('validateAnswer uses config messages with fallbacks', () => {
     if (!check.ok) expect(check.message).toBe(text);
   });
 
+  it('parses numbers strictly', () => {
+    expect(validateAnswer(question(a, 'office_days'), '   ')).toMatchObject({ ok: false, code: 'required' });
+    expect(validateAnswer(question(a, 'team_size'), '0x10')).toMatchObject({ ok: false, code: 'type' });
+    expect(validateAnswer(question(a, 'team_size'), '1e2')).toMatchObject({ ok: false, code: 'type' });
+  });
+
   it('normalizes valid input', () => {
     expect(validateAnswer(question(a, 'team_size'), '12')).toEqual({ ok: true, value: 12 });
     expect(validateAnswer(question(a, 'priorities'), ['speed', 'speed'])).toEqual({ ok: true, value: ['speed'] });
@@ -192,12 +224,28 @@ describe('validateState (server re-check of client state)', () => {
 
   it('rejects jumping over an unanswered question', () => {
     const r = validateState(a, { answers: { team_size: 5 }, history: [], currentStepId: 'priorities' });
-    expect(r.ok).toBe(false);
+    expect(r).toEqual({ ok: false, errors: [{ code: 'step_not_reachable', detail: 'priorities requires an answer to work_mode' }] });
   });
 
   it('rejects a hidden current step', () => {
     const r = validateState(a, { answers: answered, history: [], currentStepId: 'office_days' });
-    expect(r.ok).toBe(false);
+    expect(r).toEqual({ ok: false, errors: [{ code: 'step_not_reachable', detail: 'office_days is hidden' }] });
+  });
+
+  it('never trusts client history: rebuilds it from the visible steps before the current one', () => {
+    const r = validateState(a, { answers: answered, history: ['result', 'office_days', 'intro', 'intro'], currentStepId: 'async_maturity' });
+    expect(r.ok && r.state.history).toEqual(['intro', 'team_size', 'work_mode', 'priorities', 'timezone_span']);
+  });
+
+  it('optional questions can be skipped (not triggered by v1-v3, where every question is required)', () => {
+    const raw = rawConfig(1) as LooseJson;
+    raw.steps.tool_count.validation.required = false;
+    raw.steps.priorities.validation.required = false;
+    const f = resolveVariant(FunnelConfigSchema.parse(raw), 'A');
+    const { priorities: _skipped, ...rest } = answered;
+    const r = validateState(f, { answers: { ...rest, async_maturity: 'low' }, history: [], currentStepId: 'result' });
+    expect(r.ok).toBe(true);
+    expect(validateAnswer(question(f, 'priorities'), [])).toEqual({ ok: true, value: undefined });
   });
 });
 
