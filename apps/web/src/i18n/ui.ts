@@ -3,7 +3,6 @@ export const en = {
   // funnel
   'funnel.continue': 'Continue',
   'funnel.back': '← Back',
-  'funnel.progress': 'Question {index} of {count}',
   'funnel.selected': '{n} / {max} selected',
   'funnel.loadError': 'We could not load this page',
   'funnel.tryAgain': 'Try again',
@@ -13,7 +12,6 @@ export const en = {
   'funnel.startAgain': 'Start again',
   'funnel.loading': 'Loading…',
   'funnel.sessionGone': 'This session has expired. Your answers were kept for 72 hours.',
-  'funnel.progressLabel': 'Progress',
   // nav
   'nav.brand': 'Funnel Runtime',
   'nav.funnel': 'Funnel',
@@ -147,7 +145,6 @@ export type UiKey = keyof typeof en;
 export const ru: Record<UiKey, string> = {
   'funnel.continue': 'Далее',
   'funnel.back': '← Назад',
-  'funnel.progress': 'Вопрос {index} из {count}',
   'funnel.selected': 'Выбрано {n} из {max}',
   'funnel.loadError': 'Не удалось загрузить страницу',
   'funnel.tryAgain': 'Попробовать ещё раз',
@@ -157,7 +154,6 @@ export const ru: Record<UiKey, string> = {
   'funnel.startAgain': 'Начать заново',
   'funnel.loading': 'Загрузка…',
   'funnel.sessionGone': 'Эта сессия устарела. Ответы хранятся 72 часа.',
-  'funnel.progressLabel': 'Прогресс',
   'nav.brand': 'Funnel Runtime',
   'nav.funnel': 'Анкета',
   'nav.analytics': 'Аналитика',
