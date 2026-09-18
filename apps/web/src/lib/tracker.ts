@@ -7,6 +7,7 @@ import {
   type SessionDto,
 } from '@funnel/shared';
 import { storage } from './storage';
+import { uuid } from './uuid';
 
 /**
  * Client side of the event pipeline.
@@ -162,7 +163,7 @@ export function createTracker(session: SessionDto): Tracker {
       const seq = (storage.getJson<number>(seqKey) ?? 0) + 1;
       storage.setJson(seqKey, seq);
       getOutbox().push({
-        event_id: crypto.randomUUID(),
+        event_id: uuid(),
         session_id: session.sessionId,
         name,
         client_timestamp: new Date().toISOString(),

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { openDb, schemaHash } from '../src/db.js';
 import { assignVariant } from '../src/modules/assignment.js';
-import { createSession, getSession, makeApp, putState, rollback, uploadAndPublish, walkToResult, type TestContext } from './helpers.js';
+import { FUNNEL, createSession, getSession, makeApp, putState, rollback, uploadAndPublish, walkToResult, type TestContext } from './helpers.js';
 
 describe('TZ 7.1 test 1 — version is pinned to the session', () => {
   let ctx: TestContext;
@@ -140,6 +140,24 @@ describe('session state API', () => {
   });
   afterEach(async () => {
     await ctx.app.close();
+  });
+
+  it('a retried create with the same idempotency key returns the same session and does not count a second start', async () => {
+    const { app, db } = ctx;
+    const key = '7d2f9c1e-5b4a-4e3d-9a8b-1c2d3e4f5a6b';
+    const create = () => app.inject({ method: 'POST', url: '/api/sessions', payload: { funnelId: FUNNEL, idempotencyKey: key } });
+    const first = await create();
+    const retry = await create(); // the first response was "lost" and the page retries
+    expect(first.statusCode).toBe(201);
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json().sessionId).toBe(first.json().sessionId);
+    // The session id is derived from the key with a server secret, so a client cannot choose it (or its variant).
+    expect(first.json().sessionId).not.toBe(key);
+    const starts = db.prepare("SELECT COUNT(*) AS n FROM events WHERE name = 'session_started'").get() as { n: number };
+    expect(starts.n).toBe(1);
+    // A different key is a different visit.
+    const other = await app.inject({ method: 'POST', url: '/api/sessions', payload: { funnelId: FUNNEL, idempotencyKey: '0b6f3c2a-9e1d-4c7b-8a5f-2e3d4c5b6a7f' } });
+    expect(other.json().sessionId).not.toBe(first.json().sessionId);
   });
 
   it('refresh returns exactly the saved state (answers, history, current step)', async () => {

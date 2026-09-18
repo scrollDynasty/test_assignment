@@ -31,6 +31,8 @@ export interface SessionDto {
 
 export interface CreateSessionRequest {
   funnelId: string;
+  /** Random uuid kept by the client until the session is stored; a retry with it returns the same session. */
+  idempotencyKey?: string;
   utm?: Utm;
   /** Explicit variant override (tools, tests). */
   variantOverride?: string;

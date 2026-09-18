@@ -10,7 +10,7 @@ import { HttpError } from './errors.js';
 import { adminRoutes } from './routes/admin.js';
 import { AnalyticsService } from './modules/analytics.js';
 import { EventsService } from './modules/events.js';
-import { SessionsService } from './modules/sessions.js';
+import { SessionsService, sessionIdNamespace } from './modules/sessions.js';
 import { VersionsService } from './modules/versions.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { authRoutes } from './routes/auth.js';
@@ -57,7 +57,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     trustProxy: hops > 0 ? (_address: string, hop: number) => hop < hops : false,
   });
   const versions = new VersionsService(opts.db, opts.now);
-  const sessions = new SessionsService(opts.db, versions, opts.now);
+  const sessions = new SessionsService(opts.db, versions, opts.now, sessionIdNamespace(opts.adminToken));
   const services: Services = {
     versions,
     sessions,
