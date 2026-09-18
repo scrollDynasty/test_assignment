@@ -32,6 +32,8 @@ export default defineConfig({
     command: 'node apps/server/dist/main.js',
     url: `http://localhost:${PORT}/api/health`,
     reuseExistingServer: false,
+    // Server logs are kept in CI, where a failing test needs them; locally they would only clutter the output.
+    stdout: CI ? 'pipe' : 'ignore',
     timeout: 30_000,
     env: {
       NODE_ENV: 'production',
