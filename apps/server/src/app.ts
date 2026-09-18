@@ -32,6 +32,8 @@ export interface AppOptions {
   publicRateLimit?: number;
   /** Clock, injectable for tests (TTL). */
   now?: () => number;
+  /** True once shutdown has begun: health answers 503 so the platform stops routing new traffic here. */
+  draining?: () => boolean;
 }
 
 export interface Services {
@@ -101,10 +103,15 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     return reply.status(500).send({ error: 'internal', message: 'Internal server error' });
   });
 
-  // Health includes the database: a machine with a broken volume must not report healthy.
-  app.get('/api/health', async () => {
+  // Health includes the database: a machine with a broken volume must not report healthy. While draining (SIGTERM
+  // received, in-flight requests finishing) it answers 503, and responses ask clients not to reuse the connection.
+  app.get('/api/health', async (_req, reply) => {
+    if (opts.draining?.()) return reply.status(503).send({ ok: false, draining: true });
     opts.db.prepare('SELECT 1').get();
     return { ok: true };
+  });
+  app.addHook('onSend', async (_req, reply) => {
+    if (opts.draining?.()) reply.header('connection', 'close');
   });
   const auth = createAuth(opts.adminToken, opts.now);
   // Public write endpoints get a per-IP limit sized for people, not for load tests; requests carrying the access key

@@ -23,7 +23,9 @@ mkdirSync(dirname(dbPath), { recursive: true });
 const db = openDb(dbPath);
 const seed = seedIfEmpty(db, new VersionsService(db), seedPath);
 
+let draining = false;
 const app = await buildApp({
+  draining: () => draining,
   db,
   adminToken,
   // Request logs mask ids in URLs: a session id is enough to read that session's answers until it expires.
@@ -54,6 +56,7 @@ setInterval(purge, 3600_000).unref();
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     app.log.info({ signal }, 'shutting down');
+    draining = true;
     // Never hang past the platform's grace period: exit anyway after 10 s.
     setTimeout(() => process.exit(1), 10_000).unref();
     app

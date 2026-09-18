@@ -66,3 +66,16 @@ describe('public write API is rate limited per IP', () => {
     await app.close();
   });
 });
+
+describe('graceful restarts', () => {
+  it('while draining, health answers 503 and responses close the connection', async () => {
+    let draining = false;
+    const app = await buildApp({ db: openDb(':memory:'), adminToken: 'test-token', draining: () => draining });
+    expect((await app.inject({ method: 'GET', url: '/api/health' })).statusCode).toBe(200);
+    draining = true;
+    const res = await app.inject({ method: 'GET', url: '/api/health' });
+    expect(res.statusCode).toBe(503);
+    expect(res.headers.connection).toBe('close');
+    await app.close();
+  });
+});
