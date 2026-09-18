@@ -1,9 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { describe, expect, it } from 'vitest';
-import type { SessionDto } from '@funnel/shared';
+import type { AnalyticsReport, SessionDto, VariantReport } from '@funnel/shared';
 import { buildApp } from '../src/app.js';
 import { openDb, type Db } from '../src/db.js';
-import type { AnalyticsReport, VariantReport } from '../src/modules/analytics.js';
 import { FUNNEL, uploadAndPublish } from './helpers.js';
 
 /*
