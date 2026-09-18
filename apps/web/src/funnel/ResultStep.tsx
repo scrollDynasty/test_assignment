@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Result, Step } from '@funnel/shared';
 import { api } from '../lib/api';
 import type { Tracker } from '../lib/tracker';
+import { useI18n } from '../i18n';
 
 interface Props {
   step: Extract<Step, { type: 'result' }>;
@@ -18,6 +19,7 @@ type Phase = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; resultId
  * Loading / error / retry texts come from the result step's config.
  */
 export function ResultStep({ step, sessionId, tracker, whenSaved, onRestart }: Props) {
+  const { t, tc } = useI18n();
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [expanded, setExpanded] = useState(false);
@@ -63,7 +65,7 @@ export function ResultStep({ step, sessionId, tracker, whenSaved, onRestart }: P
   if (phase.kind === 'loading') {
     return (
       <div className="step result" aria-busy="true">
-        <h1>{step.content.loadingTitle ?? 'Loading…'}</h1>
+        <h1>{step.content.loadingTitle ? tc(step.content.loadingTitle) : t('funnel.loading')}</h1>
         <div className="spinner" />
       </div>
     );
@@ -71,10 +73,10 @@ export function ResultStep({ step, sessionId, tracker, whenSaved, onRestart }: P
   if (phase.kind === 'error') {
     return (
       <div className="step result">
-        <h1>{step.content.errorTitle ?? 'Something went wrong'}</h1>
+        <h1>{step.content.errorTitle ? tc(step.content.errorTitle) : t('funnel.loadError')}</h1>
         <div className="actions">
           <button className="primary" onClick={() => setAttempt((a) => a + 1)}>
-            {step.content.retryLabel ?? 'Try again'}
+            {step.content.retryLabel ? tc(step.content.retryLabel) : t('funnel.tryAgain')}
           </button>
         </div>
       </div>
@@ -91,24 +93,24 @@ export function ResultStep({ step, sessionId, tracker, whenSaved, onRestart }: P
 
   return (
     <div className="step result">
-      <p className="eyebrow">Your recommendation</p>
-      <h1>{result.title}</h1>
-      {result.summary && <p className="body">{result.summary}</p>}
+      <p className="eyebrow">{t('funnel.resultEyebrow')}</p>
+      <h1>{tc(result.title)}</h1>
+      {result.summary && <p className="body">{tc(result.summary)}</p>}
       {expanded && result.recommendations && (
         <ol className="recommendations">
           {result.recommendations.map((r) => (
-            <li key={r}>{r}</li>
+            <li key={r}>{tc(r)}</li>
           ))}
         </ol>
       )}
       <div className="actions">
         {cta && !expanded && (
           <button className="primary" onClick={onCta}>
-            {cta.label}
+            {tc(cta.label)}
           </button>
         )}
         <button className="link" onClick={onRestart}>
-          Start again
+          {t('funnel.startAgain')}
         </button>
       </div>
     </div>

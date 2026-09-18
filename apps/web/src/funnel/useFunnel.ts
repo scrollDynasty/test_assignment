@@ -217,7 +217,7 @@ export function useFunnel(funnelId: string): FunnelView {
           }
           pendingRef.current ??= state; // keep it (a newer local state, if any, still wins)
           if (++failures >= 5) {
-            setError('Your progress could not be saved. Check your connection.');
+            setError('save_failed'); // translated by the page
             break;
           }
           await new Promise((r) => setTimeout(r, 500 * 2 ** failures));
