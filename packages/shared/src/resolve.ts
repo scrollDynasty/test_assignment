@@ -57,6 +57,7 @@ export function resolveVariant(config: FunnelConfig, variant: string): ResolvedF
     version: config.version,
     experimentId: config.experiment.id,
     variant,
+    overrideQueryParam: config.experiment.overrideQueryParam ?? 'variant',
     title: config.title,
     locale: config.locale,
     sequence: [...v.stepSequence],

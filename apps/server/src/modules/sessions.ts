@@ -50,6 +50,8 @@ export interface CreateSessionInput {
   funnelId: string;
   utm: Utm;
   variantOverride?: string | undefined;
+  /** Page query; the override parameter name comes from the active version's config. */
+  query?: Record<string, string>;
 }
 
 export class SessionsService {
@@ -69,7 +71,8 @@ export class SessionsService {
 
     const id = randomUUID();
     const variants = config.experiment.variants;
-    const override = input.variantOverride && variants[input.variantOverride] ? input.variantOverride : undefined;
+    const requested = input.variantOverride ?? input.query?.[config.experiment.overrideQueryParam ?? 'variant'];
+    const override = requested && variants[requested] ? requested : undefined;
     const variant = override ?? assignVariant(config.experiment.id, id, variants);
     const assignment: Assignment = override ? 'override' : 'hash';
     const funnel = this.funnelOf({ funnel_id: input.funnelId, funnel_version: version, variant });

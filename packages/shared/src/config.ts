@@ -176,6 +176,8 @@ export interface ResolvedFunnel {
   version: number;
   experimentId: string;
   variant: string;
+  /** Query parameter that forces a variant for testing (e.g. ?variant=B). */
+  overrideQueryParam: string;
   title: string;
   locale: string | undefined;
   /** Step ids in the order this variant shows them. */
