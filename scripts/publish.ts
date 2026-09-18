@@ -10,7 +10,12 @@
 import { readFileSync } from 'node:fs';
 
 const api = (process.env.API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-const token = process.env.ADMIN_TOKEN ?? 'dev-admin-token';
+const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(api);
+const token = process.env.ADMIN_TOKEN ?? (isLocal ? 'dev-admin-token' : '');
+if (!token) {
+  console.error('ADMIN_TOKEN is required for a non-local API_URL');
+  process.exit(1);
+}
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(name);
 const option = (name: string) => {
@@ -24,7 +29,13 @@ async function call(method: string, path: string, body?: unknown): Promise<unkno
     headers: { 'x-admin-token': token, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-  const json: unknown = await res.json();
+  const text = await res.text();
+  let json: unknown = text;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    /* not JSON (e.g. a proxy error page): show it as text */
+  }
   if (!res.ok) {
     console.error(`${method} ${path} -> ${res.status}`, JSON.stringify(json, null, 2));
     process.exit(1);

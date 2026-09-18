@@ -45,7 +45,7 @@ const VERIFY = args.includes('--verify');
 // One worker by default: the behaviour model then consumes the seeded RNG in a fixed order (reproducible runs).
 const CONCURRENCY = Number(opt('concurrency', '1'));
 /** Analytics is internal (login or key); the generator reads it with the access key for --verify. */
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? 'dev-admin-token';
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(API) ? 'dev-admin-token' : '');
 const RUN_ID = `trafficgen-${SEED}-${Date.now().toString(36)}`;
 
 // ---------------------------------------------------------------- deterministic randomness
