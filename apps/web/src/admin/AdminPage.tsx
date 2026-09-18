@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useI18n } from '../i18n';
 import { ApiError, api } from '../lib/api';
 import { storage } from '../lib/storage';
 import { Nav } from '../Nav';
@@ -32,15 +33,17 @@ interface VersionsResponse {
  * The schema fingerprint is shown to demonstrate that none of these actions changes the database schema.
  */
 export function AdminPage() {
+  const { t, lang } = useI18n();
   const [token, setToken] = useState(storage.getJson<string>(TOKEN_KEY) ?? '');
   const [data, setData] = useState<VersionsResponse | null>(null);
   const [schema, setSchema] = useState<string | null>(null);
+  const [activeConfig, setActiveConfig] = useState<string | null>(null);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
-  const [activeConfig, setActiveConfig] = useState<string | null>(null);
 
   const headers = { 'x-admin-token': token };
+  const when = (iso: string) => new Date(iso).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-GB');
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -58,9 +61,9 @@ export function AdminPage() {
       }
     } catch (e) {
       setData(null);
-      setMessage({ kind: 'error', text: e instanceof ApiError && e.status === 401 ? 'Wrong admin token' : String(e) });
+      setMessage({ kind: 'error', text: e instanceof ApiError && e.status === 401 ? t('admin.wrongToken') : String(e) });
     }
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     void refresh();
@@ -71,8 +74,8 @@ export function AdminPage() {
     setMessage(null);
     try {
       const res = await action();
-      setMessage({ kind: 'ok', text: `${ok}: ${JSON.stringify(res)}` });
       await refresh();
+      setMessage({ kind: 'ok', text: `${ok}: ${JSON.stringify(res)}` });
     } catch (e) {
       const details = e instanceof ApiError && e.details ? ` ${JSON.stringify(e.details)}` : '';
       setMessage({ kind: 'error', text: `${e instanceof Error ? e.message : String(e)}${details}` });
@@ -83,7 +86,7 @@ export function AdminPage() {
 
   function parseDraft(): { funnelId: string; version: number } & Record<string, unknown> {
     const parsed = JSON.parse(draft) as { funnelId: string; version: number } & Record<string, unknown>;
-    if (parsed.funnelId !== FUNNEL) throw new Error(`This page manages "${FUNNEL}", the file is for "${parsed.funnelId}"`);
+    if (parsed.funnelId !== FUNNEL) throw new Error(t('admin.wrongFunnel', { expected: FUNNEL, actual: String(parsed.funnelId) }));
     return parsed;
   }
 
@@ -93,21 +96,18 @@ export function AdminPage() {
       const up = await api.request('POST', `/api/admin/funnels/${FUNNEL}/versions`, config, headers);
       if (!publish) return up;
       return api.request('POST', `/api/admin/funnels/${FUNNEL}/versions/${config.version}/publish`, undefined, headers);
-    }, publish ? 'Uploaded and published' : 'Uploaded');
+    }, publish ? t('admin.okUploadedPublished') : t('admin.okUploaded'));
 
   return (
     <div className="page">
       <Nav />
       <header className="page-head">
         <div>
-          <h1>Versions</h1>
-          <p className="muted">
-            Publishing changes only which version <b>new</b> sessions start on. Sessions already in progress stay on the version they started
-            with, also after a rollback.
-          </p>
+          <h1>{t('admin.title')}</h1>
+          <p className="muted">{t('admin.subtitle')}</p>
         </div>
         <label className="token">
-          Admin token
+          {t('admin.token')}
           <input
             type="password"
             value={token}
@@ -121,53 +121,62 @@ export function AdminPage() {
       </header>
 
       {message && <pre className={`message ${message.kind}`}>{message.text}</pre>}
+      {!token && <p className="notice">{t('admin.enterToken')}</p>}
 
       {data && (
         <>
           <section className="card">
             <div className="row">
               <h2>
-                Active version: <span className="active-version">v{data.activeVersion ?? '—'}</span>
+                {t('admin.active')} <span className="active-version">v{data.activeVersion ?? '—'}</span>
               </h2>
               <button
                 disabled={busy}
                 onClick={() => {
-                  if (window.confirm('Roll back the last publish? Sessions already started stay on their version.')) {
-                    void run(() => api.request('POST', `/api/admin/funnels/${FUNNEL}/rollback`, undefined, headers), 'Rolled back');
+                  if (window.confirm(t('admin.rollbackConfirm'))) {
+                    void run(() => api.request('POST', `/api/admin/funnels/${FUNNEL}/rollback`, undefined, headers), t('admin.okRolledBack'));
                   }
                 }}
               >
-                Roll back last publish
+                {t('admin.rollback')}
               </button>
             </div>
             <p className="muted small">
-              DB schema fingerprint: <code>{schema}</code>
+              {t('admin.schema')} <code>{schema}</code>
             </p>
             {activeConfig && (
               <details>
-                <summary>Active config (v{data.activeVersion}) as published</summary>
+                <summary>{t('admin.activeConfig', { version: data.activeVersion ?? '—' })}</summary>
                 <pre>{activeConfig}</pre>
               </details>
             )}
             <table>
               <thead>
-                <tr><th>Version</th><th>Experiment</th><th>Release note</th><th>Uploaded</th><th>Hash</th><th /></tr>
+                <tr>
+                  <th>{t('admin.colVersion')}</th><th>{t('admin.colExperiment')}</th><th>{t('admin.colNote')}</th>
+                  <th>{t('admin.colUploaded')}</th><th>{t('admin.colHash')}</th><th />
+                </tr>
               </thead>
               <tbody>
                 {data.versions.map((v) => (
                   <tr key={v.version} className={v.version === data.activeVersion ? 'current' : ''}>
-                    <td>v{v.version}{v.version === data.activeVersion && <span className="badge">active</span>}</td>
+                    <td>v{v.version}{v.version === data.activeVersion && <span className="badge">{t('admin.badgeActive')}</span>}</td>
                     <td><code>{v.experimentId}</code></td>
                     <td>{v.releaseNote ?? '—'}</td>
-                    <td>{new Date(v.createdAt).toLocaleString()}</td>
+                    <td>{when(v.createdAt)}</td>
                     <td><code>{v.configHash.slice(0, 10)}</code></td>
                     <td>
                       {v.version !== data.activeVersion && (
                         <button
                           disabled={busy}
-                          onClick={() => void run(() => api.request('POST', `/api/admin/funnels/${FUNNEL}/versions/${v.version}/publish`, undefined, headers), `Published v${v.version}`)}
+                          onClick={() =>
+                            void run(
+                              () => api.request('POST', `/api/admin/funnels/${FUNNEL}/versions/${v.version}/publish`, undefined, headers),
+                              t('admin.okPublished', { version: v.version }),
+                            )
+                          }
                         >
-                          Publish
+                          {t('admin.publish')}
                         </button>
                       )}
                     </td>
@@ -178,8 +187,8 @@ export function AdminPage() {
           </section>
 
           <section className="card">
-            <h2>Upload a config</h2>
-            <p className="muted small">The config is validated before it is stored; an invalid one is rejected and nothing changes.</p>
+            <h2>{t('admin.uploadTitle')}</h2>
+            <p className="muted small">{t('admin.uploadHelp')}</p>
             <input
               type="file"
               accept="application/json,.json"
@@ -188,22 +197,24 @@ export function AdminPage() {
                 if (file) setDraft(await file.text());
               }}
             />
-            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="…or paste JSON here" rows={8} />
+            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={t('admin.paste')} rows={8} />
             <div className="row">
-              <button disabled={busy || !draft} onClick={() => void upload(false)}>Upload</button>
-              <button className="primary" disabled={busy || !draft} onClick={() => void upload(true)}>Upload and publish</button>
+              <button disabled={busy || !draft} onClick={() => void upload(false)}>{t('admin.upload')}</button>
+              <button className="primary" disabled={busy || !draft} onClick={() => void upload(true)}>{t('admin.uploadPublish')}</button>
             </div>
           </section>
 
           <section className="card">
-            <h2>Release log</h2>
+            <h2>{t('admin.log')}</h2>
             <table>
-              <thead><tr><th>#</th><th>Action</th><th>From</th><th>To</th><th>By</th><th>When</th></tr></thead>
+              <thead>
+                <tr><th>#</th><th>{t('admin.colAction')}</th><th>{t('admin.colFrom')}</th><th>{t('admin.colTo')}</th><th>{t('admin.colBy')}</th><th>{t('admin.colWhen')}</th></tr>
+              </thead>
               <tbody>
                 {[...data.releases].reverse().map((r) => (
                   <tr key={r.id}>
                     <td>{r.id}</td><td>{r.action}</td><td>{r.fromVersion === null ? '—' : `v${r.fromVersion}`}</td>
-                    <td>v{r.toVersion}</td><td>{r.actor}</td><td>{new Date(r.createdAt).toLocaleString()}</td>
+                    <td>v{r.toVersion}</td><td>{r.actor}</td><td>{when(r.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>

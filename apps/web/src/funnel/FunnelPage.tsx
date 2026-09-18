@@ -4,10 +4,12 @@ import { isInteractive } from '@funnel/shared';
 import { ResultStep } from './ResultStep';
 import { InfoStep, MultiSelectStep, NumberStep, SingleSelectStep } from './steps';
 import { useFunnel } from './useFunnel';
+import { LangSwitch, useI18n } from '../i18n';
 
 export function FunnelPage() {
   const { funnelId = 'workstyle-planner' } = useParams();
   const view = useFunnel(funnelId);
+  const { t, tc } = useI18n();
   const { load, step, progress, tracker, error } = view;
   const session = load.kind === 'ready' ? load.session : null;
   const currentStepId = session?.state.currentStepId;
@@ -38,10 +40,10 @@ export function FunnelPage() {
     return (
       <Shell>
         <div className="step">
-          <h1>We could not load this page</h1>
+          <h1>{t('funnel.loadError')}</h1>
           <p className="body">{load.message}</p>
           <div className="actions">
-            <button className="primary" onClick={view.retryLoad}>Try again</button>
+            <button className="primary" onClick={view.retryLoad}>{t('funnel.tryAgain')}</button>
           </div>
         </div>
       </Shell>
@@ -57,15 +59,14 @@ export function FunnelPage() {
     <Shell>
       <div className="topbar">
         {view.canGoBack && step.type !== 'result' ? (
-          <button className="back" onClick={view.back} aria-label="Back">← Back</button>
+          <button className="back" onClick={view.back}>{t('funnel.back')}</button>
         ) : (
           <span />
         )}
-        {showProgress && (
-          <span className="progress-label">
-            Question {progress.index} of {progress.count}
-          </span>
-        )}
+        <span className="topbar-right">
+          {showProgress && <span className="progress-label">{t('funnel.progress', { index: progress.index, count: progress.count })}</span>}
+          <LangSwitch />
+        </span>
       </div>
       {showProgress && (
         <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={progress.count} aria-valuenow={progress.index}>
@@ -85,11 +86,12 @@ export function FunnelPage() {
       </div>
       {error && (
         <p className="error" role="alert">
-          {error}
+          {error === 'save_failed' ? t('funnel.saveError') : tc(error)}
         </p>
       )}
       <footer className="meta">
-        v{session.version} · variant {session.variant} · <a href="/analytics">analytics</a> · <a href="/admin">versions</a>
+        {t('funnel.meta', { version: session.version, variant: session.variant })} · <a href="/analytics">{t('nav.analytics')}</a> ·{' '}
+        <a href="/admin">{t('nav.versions')}</a>
       </footer>
     </Shell>
   );

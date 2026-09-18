@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AnswerValue, InteractiveStep, Step } from '@funnel/shared';
+import { useI18n } from '../i18n';
 
 /**
  * One component per step *type* (not per screen): texts, options, limits and messages all come from the config.
@@ -15,14 +16,15 @@ interface StepProps<S extends Step> {
 }
 
 export function InfoStep({ step, onSubmit }: StepProps<Extract<Step, { type: 'info' }>>) {
+  const { t, tc } = useI18n();
   return (
     <div className="step">
-      {step.content.eyebrow && <p className="eyebrow">{step.content.eyebrow}</p>}
-      <h1>{step.content.title}</h1>
-      {step.content.body && <p className="body">{step.content.body}</p>}
+      {step.content.eyebrow && <p className="eyebrow">{tc(step.content.eyebrow)}</p>}
+      <h1>{tc(step.content.title)}</h1>
+      {step.content.body && <p className="body">{tc(step.content.body)}</p>}
       <div className="actions">
         <button className="primary" autoFocus onClick={() => onSubmit(undefined)}>
-          {step.content.primaryActionLabel ?? 'Continue'}
+          {step.content.primaryActionLabel ? tc(step.content.primaryActionLabel) : t('funnel.continue')}
         </button>
       </div>
     </div>
@@ -30,15 +32,17 @@ export function InfoStep({ step, onSubmit }: StepProps<Extract<Step, { type: 'in
 }
 
 function Header({ step }: { step: InteractiveStep }) {
+  const { tc } = useI18n();
   return (
     <>
-      <h1 id={`${step.id}-title`}>{step.content.title}</h1>
-      {step.content.helperText && <p className="helper">{step.content.helperText}</p>}
+      <h1 id={`${step.id}-title`}>{tc(step.content.title)}</h1>
+      {step.content.helperText && <p className="helper">{tc(step.content.helperText)}</p>}
     </>
   );
 }
 
 export function SingleSelectStep({ step, initial, onSubmit, onChange }: StepProps<Extract<Step, { type: 'single-select' }>>) {
+  const { t, tc } = useI18n();
   const [value, setValue] = useState<string | undefined>(typeof initial === 'string' ? initial : undefined);
   return (
     <form className="step" noValidate onSubmit={(e) => (e.preventDefault(), onSubmit(value))}>
@@ -53,18 +57,19 @@ export function SingleSelectStep({ step, initial, onSubmit, onChange }: StepProp
               checked={value === o.value}
               onChange={() => (setValue(o.value), onChange())}
             />
-            <span>{o.label}</span>
+            <span>{tc(o.label)}</span>
           </label>
         ))}
       </div>
       <div className="actions">
-        <button className="primary" type="submit">Continue</button>
+        <button className="primary" type="submit">{t('funnel.continue')}</button>
       </div>
     </form>
   );
 }
 
 export function MultiSelectStep({ step, initial, onSubmit, onChange }: StepProps<Extract<Step, { type: 'multi-select' }>>) {
+  const { t, tc } = useI18n();
   const [values, setValues] = useState<string[]>(Array.isArray(initial) ? initial : []);
   const max = step.validation?.maxSelections;
   const toggle = (v: string) => {
@@ -80,20 +85,21 @@ export function MultiSelectStep({ step, initial, onSubmit, onChange }: StepProps
           return (
             <label key={o.value} className={`option ${checked ? 'selected' : ''}`}>
               <input type="checkbox" value={o.value} checked={checked} onChange={() => toggle(o.value)} />
-              <span>{o.label}</span>
+              <span>{tc(o.label)}</span>
             </label>
           );
         })}
       </div>
-      {max !== undefined && <p className="counter">{values.length} / {max} selected</p>}
+      {max !== undefined && <p className="counter">{t('funnel.selected', { n: values.length, max })}</p>}
       <div className="actions">
-        <button className="primary" type="submit">Continue</button>
+        <button className="primary" type="submit">{t('funnel.continue')}</button>
       </div>
     </form>
   );
 }
 
 export function NumberStep({ step, initial, onSubmit, onChange }: StepProps<Extract<Step, { type: 'number' }>>) {
+  const { t, tc } = useI18n();
   const [text, setText] = useState(typeof initial === 'number' ? String(initial) : '');
   useEffect(() => setText(typeof initial === 'number' ? String(initial) : ''), [step.id, initial]);
   return (
@@ -111,10 +117,10 @@ export function NumberStep({ step, initial, onSubmit, onChange }: StepProps<Extr
           value={text}
           onChange={(e) => (setText(e.target.value), onChange())}
         />
-        {step.input.unit && <span className="unit">{step.input.unit}</span>}
+        {step.input.unit && <span className="unit">{tc(step.input.unit)}</span>}
       </div>
       <div className="actions">
-        <button className="primary" type="submit">Continue</button>
+        <button className="primary" type="submit">{t('funnel.continue')}</button>
       </div>
     </form>
   );
