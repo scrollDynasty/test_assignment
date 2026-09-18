@@ -50,7 +50,10 @@ export class VersionsService {
   /** Parsed configs by "funnel@version". Safe to cache forever: rows are never modified. */
   private readonly cache = new Map<string, FunnelConfig>();
 
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly now: () => number = Date.now,
+  ) {}
 
   upload(funnelId: string, raw: unknown): UploadOutcome {
     const validation = validateConfig(raw);
@@ -62,6 +65,8 @@ export class VersionsService {
       throw new HttpError(400, 'funnel_mismatch', `Config is for funnel "${config.funnelId}", not "${funnelId}"`);
     }
     const hash = createHash('sha256').update(canonicalJson(raw)).digest('hex');
+    // Check-then-insert inside one IMMEDIATE transaction: concurrent uploads of the same version cannot race to a 500.
+    return this.db.transaction((): UploadOutcome => {
     const existing = this.db
       .prepare('SELECT config_hash FROM funnel_versions WHERE funnel_id = ? AND version = ?')
       .get(funnelId, config.version) as { config_hash: string } | undefined;
@@ -74,8 +79,9 @@ export class VersionsService {
         `INSERT INTO funnel_versions (funnel_id, version, config_json, config_hash, experiment_id, release_note, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(funnelId, config.version, JSON.stringify(raw), hash, config.experiment.id, config.releaseNote ?? null, Date.now());
+      .run(funnelId, config.version, JSON.stringify(raw), hash, config.experiment.id, config.releaseNote ?? null, this.now());
     return { status: 'created', version: config.version, warnings: validation.warnings };
+    }).immediate();
   }
 
   /** Makes an uploaded version active for new sessions. Publishing the already active version is a no-op. */
@@ -178,13 +184,13 @@ export class VersionsService {
         `INSERT INTO funnel_active (funnel_id, version, updated_at) VALUES (?, ?, ?)
          ON CONFLICT (funnel_id) DO UPDATE SET version = excluded.version, updated_at = excluded.updated_at`,
       )
-      .run(funnelId, version, Date.now());
+      .run(funnelId, version, this.now());
   }
 
   private log(funnelId: string, action: 'publish' | 'rollback', from: number | null, to: number, actor: string): void {
     this.db
       .prepare('INSERT INTO release_log (funnel_id, action, from_version, to_version, actor, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(funnelId, action, from, to, actor, Date.now());
+      .run(funnelId, action, from, to, actor, this.now());
   }
 
   private releaseRows(funnelId: string): ReleaseRow[] {

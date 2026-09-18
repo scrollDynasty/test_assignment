@@ -22,8 +22,11 @@ export interface AppOptions {
   logger?: boolean;
   /** Directory with the built web app; when set, the server also serves the SPA. */
   webDir?: string;
-  /** Behind a reverse proxy (Fly.io): take the client IP from X-Forwarded-For (used by rate limits). */
-  trustProxy?: boolean;
+  /**
+   * Number of reverse-proxy hops to trust for X-Forwarded-For (Fly.io: 1). Never `true`: that trusts every hop,
+   * so a client could spoof its IP with its own X-Forwarded-For header and bypass all rate limits.
+   */
+  trustProxy?: number;
   /** Requests per minute per IP on the public write API (sessions, events). */
   publicRateLimit?: number;
   /** Clock, injectable for tests (TTL). */
@@ -38,8 +41,14 @@ export interface Services {
 }
 
 export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
-  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: opts.trustProxy ?? false });
-  const versions = new VersionsService(opts.db);
+  const hops = opts.trustProxy ?? 0;
+  const app = Fastify({
+    logger: opts.logger ?? false,
+    bodyLimit: 512 * 1024,
+    // Trust only the first `hops` proxies: req.ip is the address that proxy saw, not a client-supplied header value.
+    trustProxy: hops > 0 ? (_address: string, hop: number) => hop < hops : false,
+  });
+  const versions = new VersionsService(opts.db, opts.now);
   const sessions = new SessionsService(opts.db, versions, opts.now);
   const services: Services = {
     versions,
@@ -57,13 +66,18 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     }
     const status = (err as { statusCode?: number }).statusCode;
     if (status && status >= 400 && status < 500) {
-      return reply.status(status).send({ error: 'bad_request', message: (err as Error).message });
+      const code: Record<number, string> = { 401: 'unauthorized', 404: 'not_found', 413: 'payload_too_large', 415: 'unsupported_media_type', 429: 'rate_limited' };
+      return reply.status(status).send({ error: code[status] ?? 'bad_request', message: (err as Error).message });
     }
     app.log.error(err);
     return reply.status(500).send({ error: 'internal', message: 'Internal server error' });
   });
 
-  app.get('/api/health', async () => ({ ok: true }));
+  // Health includes the database: a machine with a broken volume must not report healthy.
+  app.get('/api/health', async () => {
+    opts.db.prepare('SELECT 1').get();
+    return { ok: true };
+  });
   // Public write endpoints get a per-IP limit; generous enough for the traffic generator from one machine.
   await app.register(
     async (scope) => {

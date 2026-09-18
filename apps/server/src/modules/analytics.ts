@@ -88,6 +88,8 @@ interface SessionFacts {
   /** Steps with step_completed. */
   completed: Set<string>;
   resultId: string | null;
+  /** Result computed and stored by the server (sessions.result_id): the source of truth for the result mix. */
+  serverResultId: string | null;
 }
 
 interface PopulationRow {
@@ -96,6 +98,7 @@ interface PopulationRow {
   variant: string;
   assignment: string;
   status: string;
+  serverResultId: string | null;
   expiresAt: number;
   lastTs: number;
   back: number;
@@ -184,7 +187,7 @@ export class AnalyticsService {
       .prepare(
         `WITH ${pop}
          SELECT pop.session_id AS id, pop.funnel_version AS version, pop.variant AS variant, pop.assignment AS assignment,
-           s.status AS status, s.expires_at AS expiresAt,
+           s.status AS status, s.result_id AS serverResultId, s.expires_at AS expiresAt,
            MAX(ev.server_ts) AS lastTs,
            MAX(ev.name = 'back_clicked') AS back,
            MAX(ev.name IN (${sqlList(RESULT_EVENTS)})) AS reached,
@@ -213,6 +216,7 @@ export class AnalyticsService {
         viewed: new Set(),
         completed: new Set(),
         resultId: null,
+        serverResultId: r.serverResultId,
       });
     }
 
@@ -368,7 +372,7 @@ function variantReport(funnel: ResolvedFunnel, facts: SessionFacts[], clock: Clo
     }
 
     if (f.reached) {
-      const key = f.resultId ?? UNKNOWN_RESULT;
+      const key = f.serverResultId ?? f.resultId ?? UNKNOWN_RESULT;
       resultMix[key] = (resultMix[key] ?? 0) + 1;
     } else if (!isInProgress(f, clock)) {
       const stepId = furthest >= 0 ? funnel.sequence[furthest] : undefined;

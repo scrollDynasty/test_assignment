@@ -1,12 +1,56 @@
 import {
   IncomingEventSchema,
+  STEP_TYPES,
   filterEventProperties,
   isEventAllowed,
+  type PropertyValue,
+  type ResolvedFunnel,
   type EventBatchResponse,
   type EventStatus,
 } from '@funnel/shared';
 import type { Db } from '../db.js';
 import type { SessionsService } from './sessions.js';
+
+const DAY_MS = 24 * 3600_000;
+/** Client clocks drift and outboxes are flushed late, but not by months: older/future timestamps are refused. */
+const MAX_CLIENT_AGE_MS = 30 * DAY_MS;
+const MAX_CLIENT_AHEAD_MS = DAY_MS;
+/** String property values are identifiers only — free text (which could carry raw answers) is dropped. */
+const TOKEN = /^[A-Za-z0-9_.:-]{1,64}$/;
+const ANSWER_KINDS = new Set(['single_select', 'multi_select', 'number']);
+
+/**
+ * Second privacy/consistency gate after the key whitelist: every value must make sense for the pinned version
+ * (step ids are steps of this version, result ids are its results, …); anything else is dropped, not stored.
+ */
+function sanitizeProperties(funnel: ResolvedFunnel, props: Record<string, PropertyValue>): Record<string, PropertyValue> {
+  const out: Record<string, PropertyValue> = {};
+  for (const [key, value] of Object.entries(props)) {
+    if (typeof value === 'string' && !TOKEN.test(value)) continue;
+    switch (key) {
+      case 'next_step_id':
+      case 'destination_step_id':
+        if (typeof value === 'string' && Object.hasOwn(funnel.steps, value)) out[key] = value;
+        break;
+      case 'result_id':
+        if (typeof value === 'string' && Object.hasOwn(funnel.results, value)) out[key] = value;
+        break;
+      case 'step_type':
+        if (typeof value === 'string' && (STEP_TYPES as readonly string[]).includes(value)) out[key] = value;
+        break;
+      case 'answer_kind':
+        if (typeof value === 'string' && ANSWER_KINDS.has(value)) out[key] = value;
+        break;
+      case 'visible_step_index':
+      case 'visible_step_count':
+        if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 1000) out[key] = value;
+        break;
+      default:
+        out[key] = value;
+    }
+  }
+  return out;
+}
 
 /** Events only the server may emit. */
 const SERVER_ONLY_EVENTS = new Set(['session_started']);
@@ -92,12 +136,16 @@ export class EventsService {
           continue;
         }
         const stepId = e.step_id ?? null;
-        if (stepId !== null && !funnel.steps[stepId]) {
+        if (stepId !== null && !Object.hasOwn(funnel.steps, stepId)) {
           reject(e.event_id, 'unknown_step');
           continue;
         }
         const clientTs = typeof e.client_timestamp === 'number' ? e.client_timestamp : Date.parse(e.client_timestamp);
-        const properties = JSON.stringify(filterEventProperties(funnel.events, e.name, e.properties));
+        if (!Number.isFinite(clientTs) || clientTs < serverTs - MAX_CLIENT_AGE_MS || clientTs > serverTs + MAX_CLIENT_AHEAD_MS) {
+          reject(e.event_id, 'client_timestamp_out_of_range');
+          continue;
+        }
+        const properties = JSON.stringify(sanitizeProperties(funnel, filterEventProperties(funnel.events, e.name, e.properties)));
 
         const info = insert.run({
           event_id: e.event_id,
