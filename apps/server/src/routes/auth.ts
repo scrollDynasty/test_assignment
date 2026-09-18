@@ -10,10 +10,10 @@ const LoginBody = z.object({ key: z.string().min(1).max(512) });
 export const authRoutes =
   (auth: Auth): FastifyPluginAsync =>
   async (app) => {
-    // Brute force protection: a handful of attempts per minute per IP.
-    await app.register(rateLimit, { max: 20, timeWindow: '1 minute' });
+    // Brute force protection on the login route only (20/min per IP); /auth/me and logout are not limited by it.
+    await app.register(rateLimit, { global: false });
 
-    app.post('/auth/login', async (req, reply) => {
+    app.post('/auth/login', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
       const { key } = LoginBody.parse(req.body);
       if (!auth.keyMatches(key)) throw new HttpError(401, 'invalid_key', 'Invalid access key');
       const session = auth.issue();

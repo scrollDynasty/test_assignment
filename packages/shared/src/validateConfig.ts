@@ -46,9 +46,9 @@ export function validateConfig(raw: unknown): ConfigValidation {
     if (result.id !== key) errors.push({ path: `results.${key}.id`, message: `id "${result.id}" does not match key "${key}"` });
   }
   config.resultRules.forEach((rule, i) => {
-    if (!config.results[rule.resultId]) errors.push({ path: `resultRules.${i}.resultId`, message: `unknown result "${rule.resultId}"` });
+    if (!Object.hasOwn(config.results, rule.resultId)) errors.push({ path: `resultRules.${i}.resultId`, message: `unknown result "${rule.resultId}"` });
   });
-  if (!config.results[config.defaultResultId]) {
+  if (!Object.hasOwn(config.results, config.defaultResultId)) {
     errors.push({ path: 'defaultResultId', message: `unknown result "${config.defaultResultId}"` });
   }
   const eventNames = config.events.allowed.map((e) => e.name);
@@ -62,14 +62,14 @@ export function validateConfig(raw: unknown): ConfigValidation {
       errors.push({ path: `${base}.stepSequence`, message: 'duplicate step ids' });
     }
     variant.stepSequence.forEach((id, i) => {
-      if (!config.steps[id]) errors.push({ path: `${base}.stepSequence.${i}`, message: `unknown step "${id}"` });
+      if (!Object.hasOwn(config.steps, id)) errors.push({ path: `${base}.stepSequence.${i}`, message: `unknown step "${id}"` });
     });
     for (const id of Object.keys(variant.stepOverrides ?? {})) {
-      if (!config.steps[id]) errors.push({ path: `${base}.stepOverrides.${id}`, message: `unknown step "${id}"` });
+      if (!Object.hasOwn(config.steps, id)) errors.push({ path: `${base}.stepOverrides.${id}`, message: `unknown step "${id}"` });
       else if (!variant.stepSequence.includes(id)) warnings.push({ path: `${base}.stepOverrides.${id}`, message: 'step is not in this variant' });
     }
     for (const id of Object.keys(variant.resultOverrides ?? {})) {
-      if (!config.results[id]) errors.push({ path: `${base}.resultOverrides.${id}`, message: `unknown result "${id}"` });
+      if (!Object.hasOwn(config.results, id)) errors.push({ path: `${base}.resultOverrides.${id}`, message: `unknown result "${id}"` });
     }
   }
   if (errors.length > 0) return { ok: false, errors, warnings };

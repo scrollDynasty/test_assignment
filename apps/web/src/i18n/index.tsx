@@ -46,7 +46,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       tc: (text) => {
         if (text === undefined) return '';
         if (lang !== 'ru') return text;
-        const exact = contentRu[text];
+        const exact = Object.hasOwn(contentRu, text) ? contentRu[text] : undefined;
         if (exact) return exact;
         for (const [pattern, render] of genericRu) {
           const m = text.match(pattern);

@@ -35,7 +35,7 @@ export class UnknownVariantError extends Error {
  * (validateConfig runs the same merge at publish time, so this never throws for a published version).
  */
 export function resolveVariant(config: FunnelConfig, variant: string): ResolvedFunnel {
-  const v = config.experiment.variants[variant];
+  const v = Object.hasOwn(config.experiment.variants, variant) ? config.experiment.variants[variant] : undefined;
   if (!v) throw new UnknownVariantError(variant);
 
   const steps: Record<string, Step> = {};

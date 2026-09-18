@@ -72,7 +72,8 @@ export class SessionsService {
     const id = randomUUID();
     const variants = config.experiment.variants;
     const requested = input.variantOverride ?? input.query?.[config.experiment.overrideQueryParam ?? 'variant'];
-    const override = requested && variants[requested] ? requested : undefined;
+    // Object.hasOwn: user input must never match inherited keys like "toString" or "__proto__".
+    const override = requested && Object.hasOwn(variants, requested) ? requested : undefined;
     const variant = override ?? assignVariant(config.experiment.id, id, variants);
     const assignment: Assignment = override ? 'override' : 'hash';
     const funnel = this.funnelOf({ funnel_id: input.funnelId, funnel_version: version, variant });
@@ -146,10 +147,12 @@ export class SessionsService {
 
     const now = this.now();
     const updated = this.db
-      .prepare('UPDATE sessions SET state_json = ?, state_rev = state_rev + 1, updated_at = ? WHERE id = ? AND state_rev = ?')
+      // Any state change reopens a completed session: its stored result is recomputed on the next /result.
+      .prepare(`UPDATE sessions SET state_json = ?, state_rev = state_rev + 1, updated_at = ?, status = 'active', result_id = NULL
+               WHERE id = ? AND state_rev = ?`)
       .run(JSON.stringify(check.state), now, id, rev);
     if (updated.changes === 0) throw new HttpError(409, 'stale_state', 'Session state was changed elsewhere');
-    return this.toDto({ ...row, state_json: JSON.stringify(check.state), state_rev: rev + 1, updated_at: now }, funnel);
+    return this.toDto({ ...row, state_json: JSON.stringify(check.state), state_rev: rev + 1, updated_at: now, status: 'active', result_id: null }, funnel);
   }
 
   /** The result is computed on the server from saved answers; the client cannot pick its own result. */

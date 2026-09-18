@@ -10,7 +10,9 @@ export const Z_95 = 1.959963984540054;
 /** z for power 0.8 (one-sided quantile of 0.8). */
 export const Z_POWER_80 = 0.8416212335729143;
 
-export type Interval = [number, number];
+import type { Interval } from '@funnel/shared';
+
+export type { Interval };
 
 /** a / b, or null when b is 0. */
 export function ratio(a: number, b: number): number | null {

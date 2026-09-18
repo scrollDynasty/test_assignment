@@ -27,7 +27,8 @@ const app = await buildApp({
   db,
   adminToken,
   logger: true,
-  trustProxy: process.env.TRUST_PROXY === 'true',
+  // Number of trusted proxy hops (Fly.io = 1). "true" is accepted as 1 for convenience, never as "trust all".
+  trustProxy: process.env.TRUST_PROXY === 'true' ? 1 : Number(process.env.TRUST_PROXY ?? 0),
   publicRateLimit: Number(process.env.PUBLIC_RATE_LIMIT ?? 3000),
   ...(existsSync(webDir) ? { webDir } : {}),
 });
@@ -40,3 +41,17 @@ purge();
 setInterval(purge, 3600_000).unref();
 
 await app.listen({ port, host: '0.0.0.0' });
+
+// Graceful shutdown (deploys send SIGTERM): stop accepting, finish in-flight requests, close SQLite cleanly.
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(signal, () => {
+    app.log.info({ signal }, 'shutting down');
+    app
+      .close()
+      .catch((e: unknown) => app.log.error(e))
+      .finally(() => {
+        db.close();
+        process.exit(0);
+      });
+  });
+}
