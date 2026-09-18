@@ -45,8 +45,9 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* Dark theme: follows the system unless the visitor picked a theme with the toggle (data-theme on <html>). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --ground: #111512;
     --surface: #181d1a;
     --raised: #1d231f;
@@ -71,6 +72,31 @@
     --check-fg: #111512;
     color-scheme: dark;
   }
+}
+:root[data-theme='dark'] {
+  --ground: #111512;
+  --surface: #181d1a;
+  --raised: #1d231f;
+  --ink: #e5eae4;
+  --muted: #a0aba2;
+  --faint: #748077;
+  --line: #2b332e;
+  --line-strong: #56625a;
+  --accent: #7cc9a9;
+  --accent-hover: #97d7bc;
+  --accent-ink: #0e1a14;
+  --accent-soft: #1d3029;
+  --marker: #e8c94f;
+  --marker-soft: #36301a;
+  --marker-ink: #17201b;
+  --good: #7cc9a9;
+  --good-soft: #1b2e25;
+  --danger: #f08b80;
+  --danger-soft: #3a1d1a;
+  --focus: #7cc9a9;
+  --check-bg: #e8c94f;
+  --check-fg: #111512;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -103,6 +129,39 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
 .lang button:hover { color: var(--ink); }
 .lang button.on { background: var(--ink); color: var(--ground); }
 
+/* ---------- theme switch ---------- */
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  transition: border-color 0.15s ease;
+}
+.theme-toggle:hover { border-color: var(--line-strong); }
+.page .theme-toggle { margin-right: 8px; }
+.theme-toggle svg { overflow: visible; }
+.theme-toggle .disc, .theme-toggle .bite { transition: r 0.45s cubic-bezier(0.65, 0, 0.35, 1), cx 0.45s cubic-bezier(0.65, 0, 0.35, 1), cy 0.45s cubic-bezier(0.65, 0, 0.35, 1); }
+.theme-toggle .rays { transform-origin: 12px 12px; transition: transform 0.45s cubic-bezier(0.65, 0, 0.35, 1), opacity 0.3s ease; }
+/* Sun: small disc, bite parked outside, rays out. Moon: bigger disc with a bite, rays folded in. */
+.theme-toggle .bite { cx: 30px; cy: -6px; }
+.theme-toggle .is-moon .disc { r: 8px; }
+.theme-toggle .is-moon .bite { cx: 17px; cy: 7px; r: 7px; }
+.theme-toggle .is-moon .rays { transform: rotate(-60deg) scale(0.4); opacity: 0; }
+
+/*
+ * Theme change = a wave: the new theme is painted over the old one as a circle growing from the switch
+ * (the circle itself is animated from lib/theme.tsx, where the switch's position is known).
+ * During it the page is one flat picture: the step and result names are switched off, so nothing else moves.
+ */
+.vt-theme .step-slot, .vt-theme .result .actions { view-transition-name: none; }
+.vt-theme::view-transition-old(root), .vt-theme::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+.vt-theme::view-transition-new(root) { z-index: 1; }
+
 /* ---------- buttons ---------- */
 .primary {
   display: inline-flex;
@@ -132,12 +191,15 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
    ============================================================ */
 /* The whole screen is the swipe area (swipe right = back); vertical scrolling stays native. */
 .funnel-shell { position: relative; min-height: 100vh; display: flex; flex-direction: column; touch-action: pan-y; }
-/* Only the language switch, pinned to the corner: it takes no space, so the question sits in the true centre. */
+/* Theme and language switches, pinned to the corner: they take no space, so the question sits in the true centre. */
 .funnel-head {
   position: absolute;
   top: 18px;
   right: clamp(16px, 4vw, 40px);
   z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* The step is centred on the screen, a little above the middle (optical centre); a tall step simply scrolls. */
@@ -343,7 +405,7 @@ select, .token input, textarea {
   color: var(--ink);
 }
 select:focus, .token input:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.page button:not(.primary):not(.link):not(.lang button) {
+.page button:not(.primary):not(.link):not(.lang button):not(.theme-toggle) {
   min-height: 38px;
   padding: 0 14px;
   border: 1px solid var(--line-strong);
