@@ -6,6 +6,7 @@ import { InfoStep, MultiSelectStep, NumberStep, SingleSelectStep } from './steps
 import { useFunnel } from './useFunnel';
 import { useSwipeBack } from './useSwipeBack';
 import { LangSwitch, useI18n } from '../i18n';
+import { ThemeToggle } from '../lib/theme';
 
 export function FunnelPage() {
   const { funnelId = 'workstyle-planner' } = useParams();
@@ -117,6 +118,7 @@ function Shell({ shellRef, children }: { shellRef: RefObject<HTMLDivElement | nu
   return (
     <div className="funnel-shell" ref={shellRef}>
       <header className="funnel-head">
+        <ThemeToggle />
         <LangSwitch />
       </header>
       <main className="funnel">{children}</main>

@@ -3,6 +3,8 @@ export const en = {
   // funnel
   'funnel.continue': 'Continue',
   'funnel.back': '← Back',
+  'theme.toDark': 'Switch to dark theme',
+  'theme.toLight': 'Switch to light theme',
   'funnel.selected': '{n} / {max} selected',
   'funnel.loadError': 'We could not load this page',
   'funnel.tryAgain': 'Try again',
@@ -145,6 +147,8 @@ export type UiKey = keyof typeof en;
 export const ru: Record<UiKey, string> = {
   'funnel.continue': 'Далее',
   'funnel.back': '← Назад',
+  'theme.toDark': 'Включить тёмную тему',
+  'theme.toLight': 'Включить светлую тему',
   'funnel.selected': 'Выбрано {n} из {max}',
   'funnel.loadError': 'Не удалось загрузить страницу',
   'funnel.tryAgain': 'Попробовать ещё раз',

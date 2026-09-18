@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { LangSwitch, useI18n } from './i18n';
 import { logout } from './internal/InternalGate';
+import { ThemeToggle } from './lib/theme';
 
 /** Navigation of the internal area; the public funnel has no links to it. */
 export function Nav({ internal = true }: { internal?: boolean }) {
@@ -16,6 +17,7 @@ export function Nav({ internal = true }: { internal?: boolean }) {
         </>
       )}
       <span className="spacer" />
+      <ThemeToggle />
       <LangSwitch />
       {internal && (
         <button className="link logout" onClick={() => void logout()}>
