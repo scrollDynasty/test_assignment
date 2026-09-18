@@ -232,14 +232,15 @@ export class AnalyticsService {
       if (r.completed === 1) f.completed.add(r.stepId);
     }
 
-    // Latest result per session: ordered ascending, so the last row seen per session wins.
+    // Latest result per session: ordered ascending, so the last row seen per session wins. The user's own
+    // order (client seq) comes first: events of one batch share server_ts, so server time cannot order them.
     const resultRows = this.db
       .prepare(
         `WITH ${pop}
          SELECT ev.session_id AS id, json_extract(ev.properties_json, '$.result_id') AS resultId
          FROM events ev JOIN pop ON pop.session_id = ev.session_id
          WHERE ev.name IN (${sqlList(RESULT_EVENTS)})
-         ORDER BY ev.session_id, ev.server_ts, ev.event_id`,
+         ORDER BY ev.session_id, COALESCE(ev.seq, -1), ev.client_ts, ev.server_ts, ev.event_id`,
       )
       .all(params) as { id: string; resultId: string | number | null }[];
     for (const r of resultRows) {
@@ -294,19 +295,17 @@ export class AnalyticsService {
     const totals = this.db
       .prepare('SELECT COALESCE(SUM(accepted), 0) AS accepted, COALESCE(SUM(duplicates), 0) AS duplicates, COALESCE(SUM(rejected), 0) AS rejected FROM ingest_log')
       .get() as { accepted: number; duplicates: number; rejected: number };
+    // Aggregated in SQL: the log grows with every batch, it must not be loaded into memory per request.
     const rejectedReasons: Record<string, number> = {};
-    for (const { reasons } of this.db.prepare('SELECT reasons FROM ingest_log').all() as { reasons: string }[]) {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(reasons);
-      } catch {
-        continue;
-      }
-      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
-      for (const [reason, count] of Object.entries(parsed as Record<string, unknown>)) {
-        if (typeof count === 'number' && Number.isFinite(count)) rejectedReasons[reason] = (rejectedReasons[reason] ?? 0) + count;
-      }
-    }
+    const reasonRows = this.db
+      .prepare(
+        `SELECT r.key AS reason, SUM(r.value) AS n
+         FROM ingest_log l, json_each(CASE WHEN json_valid(l.reasons) THEN l.reasons ELSE '{}' END) r
+         WHERE r.type IN ('integer', 'real')
+         GROUP BY r.key ORDER BY r.key`,
+      )
+      .all() as { reason: string; n: number }[];
+    for (const { reason, n } of reasonRows) rejectedReasons[reason] = n;
     return { rawEvents: raw, ...totals, rejectedReasons };
   }
 }

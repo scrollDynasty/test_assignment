@@ -9,6 +9,7 @@ primary_region = "fra"
   NODE_ENV = "production"
   PORT = "8080"
   DB_PATH = "/data/funnel.db"
+  TRUST_PROXY = "true"
 
 [mounts]
   source = "funnel_data"

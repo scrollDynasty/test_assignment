@@ -23,7 +23,14 @@ mkdirSync(dirname(dbPath), { recursive: true });
 const db = openDb(dbPath);
 const seed = seedIfEmpty(db, new VersionsService(db), seedPath);
 
-const app = await buildApp({ db, adminToken, logger: true, ...(existsSync(webDir) ? { webDir } : {}) });
+const app = await buildApp({
+  db,
+  adminToken,
+  logger: true,
+  trustProxy: process.env.TRUST_PROXY === 'true',
+  publicRateLimit: Number(process.env.PUBLIC_RATE_LIMIT ?? 3000),
+  ...(existsSync(webDir) ? { webDir } : {}),
+});
 if (seed.seeded) app.log.info(seed, 'seeded initial funnel version');
 const purge = () => {
   const n = purgeExpiredAnswers(db);

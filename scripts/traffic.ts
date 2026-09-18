@@ -285,14 +285,18 @@ interface Expected {
   beforeFirstStep: number;
   back: number;
   dropoff: Record<string, number>;
+  viewed: Record<string, number>;
 }
 
 function expectedFor(version: number, variant: string, funnel: ResolvedFunnel): Expected {
-  const e: Expected = { started: 0, reachedResult: 0, ctaClicked: 0, beforeFirstStep: 0, back: 0, dropoff: {} };
+  const e: Expected = { started: 0, reachedResult: 0, ctaClicked: 0, beforeFirstStep: 0, back: 0, dropoff: {}, viewed: {} };
+  const resultStep = funnel.sequence.find((id) => funnel.steps[id]?.type === 'result');
   for (const t of truths.filter((x) => x.version === version && x.variant === variant)) {
     e.started++;
     if (t.back) e.back++;
     if (t.cta) e.ctaClicked++;
+    for (const id of t.viewed) e.viewed[id] = (e.viewed[id] ?? 0) + 1;
+    if (t.reached && resultStep) e.viewed[resultStep] = (e.viewed[resultStep] ?? 0) + 1;
     if (t.reached) {
       e.reachedResult++;
       continue;
@@ -355,6 +359,12 @@ async function main() {
       check('reached result', exp.reachedResult, delta('reachedResult'));
       check('CTA clicked', exp.ctaClicked, delta('ctaClicked'));
       check('before first step', exp.beforeFirstStep, delta('beforeFirstStep'));
+      const backCount = (r: { backRate: number | null; started: number } | undefined) => Math.round((r?.backRate ?? 0) * (r?.started ?? 0));
+      check('sessions with Back', exp.back, backCount(v) - backCount(prev));
+      for (const s of v.steps) {
+        const prevViewed = prev?.steps.find((p) => p.stepId === s.stepId)?.viewed ?? 0;
+        check(`viewed ${s.stepId}`, exp.viewed[s.stepId] ?? 0, s.viewed - prevViewed);
+      }
       for (const s of v.steps) {
         const prevDrop = prev?.steps.find((p) => p.stepId === s.stepId)?.dropoff ?? 0;
         const expDrop = exp.dropoff[s.stepId] ?? 0;
@@ -364,7 +374,8 @@ async function main() {
     }
     console.table(rows);
   }
-  console.log(`\nDashboard: ${API.replace(/:3000$/, ':5173')}/analytics  (set "in progress" to off to see all drop-offs right away)`);
+  // Fresh synthetic sessions are all "recently active"; the link turns the in-progress window off so they show as drop-offs.
+  console.log(`\nDashboard: ${API.replace(/:3000$/, ':5173')}/analytics?in_progress_minutes=0`);
   if (VERIFY) {
     console.log(ok ? '\nVERIFY OK: dashboard numbers match the generator ground truth.' : '\nVERIFY FAILED');
     process.exit(ok ? 0 : 1);
