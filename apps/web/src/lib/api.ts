@@ -31,10 +31,31 @@ async function request<T>(method: string, path: string, body?: unknown, headers:
   return json as T;
 }
 
+/** No answer at all, or the platform answering for a server that is restarting (deploy, crash restart). */
+const isTransient = (e: unknown): boolean =>
+  !(e instanceof ApiError) || e.status === 502 || e.status === 503 || e.status === 504;
+
+/**
+ * Retries a request that is safe to repeat while the server is briefly unavailable (a deploy restarts the single
+ * instance for a few seconds). Back-off 0.5 → 8 s, about 15 s in total; anything else fails immediately.
+ */
+async function withRetry<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await run();
+    } catch (e) {
+      if (attempt >= 5 || !isTransient(e)) throw e;
+      await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+    }
+  }
+}
+
 export const api = {
-  createSession: (body: CreateSessionRequest) => request<SessionDto>('POST', '/api/sessions', body),
-  getSession: (id: string) => request<SessionDto>('GET', `/api/sessions/${id}`),
+  // Safe to repeat: creation carries an idempotency key, reads are reads, the result is computed from saved answers.
+  createSession: (body: CreateSessionRequest) => withRetry(() => request<SessionDto>('POST', '/api/sessions', body)),
+  getSession: (id: string) => withRetry(() => request<SessionDto>('GET', `/api/sessions/${id}`)),
+  result: (id: string) => withRetry(() => request<{ resultId: string; result: Result }>('POST', `/api/sessions/${id}/result`)),
+  // Not retried here: the save loop in useFunnel owns retries and the optimistic lock (rev).
   saveState: (id: string, state: SessionState, rev: number) => request<SessionDto>('PUT', `/api/sessions/${id}/state`, { state, rev }),
-  result: (id: string) => request<{ resultId: string; result: Result }>('POST', `/api/sessions/${id}/result`),
   request,
 };
