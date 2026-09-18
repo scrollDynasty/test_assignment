@@ -15,3 +15,9 @@ backups
 .claude
 .vscode
 .idea
+# Tests, reports and CI config are not part of the image
+e2e
+test-results
+playwright-report
+coverage
+.github

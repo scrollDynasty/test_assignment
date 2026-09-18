@@ -53,7 +53,8 @@ page_headers=$(curl -fsSI "$URL/f/workstyle-planner")
 echo "$page_headers" | grep -qi '^content-security-policy:' || fail "no Content-Security-Policy"
 echo "$page_headers" | grep -qi '^x-content-type-options: nosniff' || fail "no nosniff"
 echo "$page_headers" | grep -qi '^cache-control: no-cache' || fail "index.html must not be cached"
-asset=$(curl -fsS "$URL/f/workstyle-planner" | grep -o '/assets/index-[^"]*\.js' | head -1)
+asset=$(curl -fsS "$URL/f/workstyle-planner" | grep -o '/assets/index-[^"]*\.js' | head -1 || true)
+[ -n "$asset" ] || fail "no hashed entry script in index.html"
 curl -fsSI "$URL$asset" | grep -qi 'immutable' || fail "hashed assets must be immutable"
 echo "   CSP, nosniff, no-cache page, immutable assets"
 
