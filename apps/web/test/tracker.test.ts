@@ -108,6 +108,59 @@ describe('event outbox', () => {
     tracker.track('step_viewed', 'intro', {});
     await vi.advanceTimersByTimeAsync(2500);
     expect(queued()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(sent).toHaveLength(1); // and it is not retried later either
+  });
+
+  it('removes only the events the server answered for; an unacknowledged one is resent with the same id', async () => {
+    const tracker = await freshTracker();
+    respond = (body) =>
+      new Response(JSON.stringify({ accepted: 1, duplicates: 0, rejected: 0, results: [{ event_id: body.events[0]?.event_id, status: 'accepted' }] }), { status: 200 });
+    tracker.track('step_viewed', 'intro', {});
+    tracker.track('step_viewed', 'team_size', {});
+    await vi.advanceTimersByTimeAsync(2500);
+    // The first batch carried both; only the first was acknowledged, so the second went out again right away.
+    const [first, second] = sent[0]?.events.map((e) => e.event_id) ?? [];
+    expect(sent.map((b) => b.events.map((e) => e.event_id))).toEqual([[first, second], [second]]);
+    expect(queued()).toHaveLength(0);
+  });
+
+  it('sends events left over from the previous page load first, as soon as the new page tracks anything', async () => {
+    // A page always tracks step_viewed on load, which starts the outbox; leftovers go out 0.5 s later, not after 2 s.
+    const leftover = [{ event_id: 'left-1', name: 'step_viewed' }, { event_id: 'left-2', name: 'step_completed' }];
+    window.localStorage.setItem('funnel:outbox', JSON.stringify(leftover));
+    const tracker = await freshTracker();
+    tracker.track('step_viewed', 'intro', {});
+    await vi.advanceTimersByTimeAsync(600);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.events.map((e) => e.event_id).slice(0, 2)).toEqual(['left-1', 'left-2']);
+    expect(sent[0]?.events).toHaveLength(3);
+  });
+
+  it('backs off on server errors — 1 s, 2 s, 4 s … — and never gives up on the events', async () => {
+    const tracker = await freshTracker();
+    respond = () => new Response('{}', { status: 503 });
+    tracker.track('step_viewed', 'intro', {});
+    await vi.advanceTimersByTimeAsync(2000); // first attempt
+    await vi.advanceTimersByTimeAsync(999);
+    expect(sent).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1); // +1 s
+    expect(sent).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(sent).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1); // +2 s
+    expect(sent).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(4000); // +4 s
+    expect(sent).toHaveLength(4);
+    expect(queued()).toHaveLength(1);
+  });
+
+  it('flushes at once when ten events are queued, without waiting for the timer', async () => {
+    const tracker = await freshTracker();
+    for (let i = 0; i < 10; i++) tracker.track('step_viewed', 'intro', {});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.events).toHaveLength(10);
   });
 
   it("sends an event only if the session's own version declares it (safe to ship code before publishing v3)", async () => {

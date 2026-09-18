@@ -56,7 +56,7 @@ describe('confidence intervals and tests', () => {
     fc.assert(
       fc.property(counts, counts, ([xA, nA], [xB, nB]) => {
         const t = twoProportionZTest(xA, nA, xB, nB);
-        if (t === null) return;
+        if (t === null) return; // both arms at 0% or 100%: no variance, the test is undefined by design
         expect(t.pValue).toBeGreaterThanOrEqual(0);
         expect(t.pValue).toBeLessThanOrEqual(1);
         expect(twoProportionZTest(xB, nB, xA, nA)?.pValue).toBeCloseTo(t.pValue, 12);
@@ -70,8 +70,9 @@ describe('confidence intervals and tests', () => {
       fc.property(fc.double({ min: 0.05, max: 0.95, noNaN: true }), fc.integer({ min: 20, max: 2000 }), (p, n) => {
         const small = mde(p, n, n);
         const large = mde(p, n * 4, n * 4);
-        if (small === null || large === null) return;
-        expect(large).toBeLessThan(small);
+        expect(small).not.toBeNull();
+        expect(large).not.toBeNull();
+        expect(large as number).toBeLessThan(small as number);
       }),
     );
   });
@@ -110,6 +111,17 @@ describe('A/B assignment', () => {
         expect(v[picked]?.weight ?? 0).toBeGreaterThan(0);
       }),
     );
+  });
+
+  it('splits traffic by the configured weights (20 000 fixed sessions, 50/50 and 70/30)', () => {
+    const sessions = Array.from({ length: 20_000 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`);
+    for (const [wA, wB] of [[50, 50], [70, 30]] as const) {
+      const counts = { A: 0, B: 0 };
+      for (const s of sessions) counts[assignVariant('exp-split', s, { A: { weight: wA }, B: { weight: wB } }) as 'A' | 'B']++;
+      expect(counts.A / sessions.length).toBeCloseTo(wA / (wA + wB), 1);
+      // A healthy hash passes our own sample-ratio-mismatch check.
+      expect(srmChiSquare([counts.A, counts.B], [wA, wB])?.pValue).toBeGreaterThan(1e-4);
+    }
   });
 
   it('does not depend on the order in which variants are listed in the config', () => {

@@ -1,6 +1,7 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
+import { E2E_ADMIN_TOKEN } from './e2e/constants';
 
 /**
  * End-to-end tests against the production build (the same server + SPA the Docker image runs), on a fresh SQLite
@@ -8,7 +9,6 @@ import { defineConfig, devices } from '@playwright/test';
  * (channel "msedge"), so nothing has to be downloaded on a developer machine.
  */
 const PORT = 4173;
-export const E2E_ADMIN_TOKEN = 'e2e-admin-token-0123456789';
 const CI = Boolean(process.env.CI);
 const channel = CI ? {} : { channel: 'msedge' as const };
 
@@ -23,6 +23,8 @@ export default defineConfig({
     trace: 'retain-on-failure',
     // Functional tests assert states, not animations: without motion, view transitions finish at once.
     reducedMotion: 'reduce',
+    // The shell-caching service worker is not under test here, and it would hide requests from page.route().
+    serviceWorkers: 'block',
   },
   projects: [
     { name: 'desktop', testIgnore: /mobile\.spec/, use: { ...devices['Desktop Chrome'], ...channel } },

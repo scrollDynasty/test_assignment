@@ -25,4 +25,9 @@ test('on a touch phone Back is a swipe with a one-time hint, and progress has no
   await page.locator('.funnel-shell').dispatchEvent('touchend', { touches: [], changedTouches: [{ identifier: 1, clientX: 280, clientY: y }] });
   await expect(stepHeading(page)).toHaveText('How many people are on the team?');
   await expect(page.getByRole('spinbutton')).toHaveValue('8');
+
+  // The hint is one-time: moving forward again to a step with Back available does not show it again.
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(stepHeading(page)).toHaveText('Where does the team work most of the time?');
+  await expect(page.getByText('Swipe right to go back')).toHaveCount(0);
 });
