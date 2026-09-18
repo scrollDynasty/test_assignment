@@ -11,7 +11,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "npm run dev -w @funnel/server & npm run dev -w @funnel/web",
+    "dev": "concurrently -n api,web -c blue,magenta \"npm run dev -w @funnel/server\" \"npm run dev -w @funnel/web\"",
     "build": "npm run build -w @funnel/shared && npm run build -w @funnel/web && npm run build -w @funnel/server",
     "start": "npm run start -w @funnel/server",
     "test": "vitest run",
@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.1",
+    "concurrently": "^10.0.5",
     "eslint": "^10.10.0",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
