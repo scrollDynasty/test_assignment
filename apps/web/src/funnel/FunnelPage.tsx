@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
 import { useParams } from 'react-router-dom';
 import { isInteractive } from '@funnel/shared';
 import { ResultStep } from './ResultStep';
 import { InfoStep, MultiSelectStep, NumberStep, SingleSelectStep } from './steps';
 import { useFunnel } from './useFunnel';
+import { useSwipeBack } from './useSwipeBack';
 import { LangSwitch, useI18n } from '../i18n';
 
 export function FunnelPage() {
@@ -17,6 +18,8 @@ export function FunnelPage() {
   const session = load.kind === 'ready' ? load.session : null;
   const currentStepId = session?.state.currentStepId;
   const depth = session?.state.history.length ?? 0;
+  const shellRef = useRef<HTMLDivElement>(null);
+  useSwipeBack(shellRef, view.canGoBack && step?.type !== 'result', view.back);
 
   // step_viewed once per navigation to a step (a re-view after Back or refresh is a new, legitimate view).
   // The ref guards against React StrictMode running the effect twice for the same navigation.
@@ -43,10 +46,10 @@ export function FunnelPage() {
     if (navId > 1) document.querySelector<HTMLElement>('.step h1')?.focus();
   }, [navId]);
 
-  if (load.kind === 'loading') return <Shell><div className="spinner" /></Shell>;
+  if (load.kind === 'loading') return <Shell shellRef={shellRef}><div className="spinner" /></Shell>;
   if (load.kind === 'error') {
     return (
-      <Shell>
+      <Shell shellRef={shellRef}>
         <div className="step">
           <h1>{t('funnel.loadError')}</h1>
           <p className="body">{load.message}</p>
@@ -63,14 +66,14 @@ export function FunnelPage() {
   const common = { initial: answer, onSubmit: view.submit, onChange: view.clearError, invalid: Boolean(error) && error !== 'session_gone' };
 
   return (
-    <Shell title={tc(session.funnel.title)}>
+    <Shell shellRef={shellRef}>
       {/* No "question N of M" on purpose: visitors do not see how many steps remain (a product decision, see
-          WORKLOG). Progress is still computed by the engine and sent with step_viewed for analytics. */}
-      <div className="stepbar">
-        {view.canGoBack && step.type !== 'result' && (
-          <button className="back" onClick={view.back}>{t('funnel.back')}</button>
-        )}
-      </div>
+          WORKLOG). Progress is still computed by the engine and sent with step_viewed for analytics.
+          No visible Back button either: back is a swipe right (useSwipeBack) or the browser's own Back. This button
+          stays for keyboard and screen-reader users: invisible until it receives focus (like a skip link). */}
+      {view.canGoBack && step.type !== 'result' && (
+        <button className="back-a11y" onClick={view.back}>{t('funnel.back')}</button>
+      )}
 
       {/* key: remount per navigation so each step starts from its saved answer */}
       <div key={`${currentStepId}:${depth}`} className="step-slot">
@@ -110,14 +113,10 @@ function useDebugFlag(): boolean {
   }
 }
 
-function Shell({ title, children }: { title?: string; children: React.ReactNode }) {
+function Shell({ shellRef, children }: { shellRef: RefObject<HTMLDivElement | null>; children: ReactNode }) {
   return (
-    <div className="funnel-shell">
+    <div className="funnel-shell" ref={shellRef}>
       <header className="funnel-head">
-        <span className="wordmark">
-          <span className="wordmark-glyph" aria-hidden="true" />
-          {title}
-        </span>
         <LangSwitch />
       </header>
       <main className="funnel">{children}</main>
