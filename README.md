@@ -72,6 +72,33 @@ docker build -t funnel-runtime .
 docker run -p 8080:8080 -v funnel-data:/data -e ADMIN_TOKEN=<16+ символов> funnel-runtime
 ```
 
+### Ключ доступа (`ADMIN_TOKEN`) для Docker и хостинга
+
+Ключа **нет внутри образа**: `docker build` его не видит и не сохраняет (`.env` и базы исключены через
+`.dockerignore`). Ключ передаётся только при запуске контейнера, поэтому один и тот же образ можно запускать с разными
+ключами, а утечка образа не раскрывает ключ. Без `ADMIN_TOKEN` (или если он короче 16 символов) сервер в проде
+не стартует: в логе будет ошибка `ADMIN_TOKEN (16+ chars) is required`. Встроенный `dev-admin-token` работает
+только с `npm run dev`.
+
+1. Сгенерировать случайный ключ (нужен только Node, который уже стоит для проекта):
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
+   ```
+   Получится строка из 32 символов, например `k3J9…` — сохраните её в менеджере паролей.
+   Без Node можно так: `docker run --rm node:22-bookworm-slim node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"`.
+2. Передать ключ контейнеру при запуске:
+   ```bash
+   docker run -d -p 8080:8080 -v funnel-data:/data -e ADMIN_TOKEN=<ключ> funnel-runtime
+   ```
+   Чтобы ключ не попал в историю терминала, его можно положить в файл `.env` (он в `.gitignore`) строкой
+   `ADMIN_TOKEN=<ключ>` и запускать `docker run -d -p 8080:8080 -v funnel-data:/data --env-file .env funnel-runtime`.
+3. На хостинге (Railway и т.п.) ключ задаётся в разделе переменных окружения сервиса как `ADMIN_TOKEN`, а не в коде
+   и не в Dockerfile.
+4. Проверить: открыть `/internal`, ввести ключ. Скрипты передают тот же ключ через переменную окружения:
+   `ADMIN_TOKEN=<ключ> npm run traffic -- --url http://localhost:8080 --sessions 50 --verify`.
+5. Сменить ключ: перезапустить контейнер с новым `ADMIN_TOKEN` (данные на volume сохраняются). Все, кто вошёл
+   со старым ключом, будут разлогинены.
+
 > Windows: если `npm ci` не может собрать `better-sqlite3` (нет готового бинарника под вашу связку Node/Visual Studio),
 > соберите его вручную: `npx node-gyp@latest rebuild --release` в `node_modules/better-sqlite3`. В Docker (Linux)
 > используется готовый бинарник.
