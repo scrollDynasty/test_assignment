@@ -8,6 +8,8 @@
  *  - scripts/test/i18n.test.ts fails if any text of funnel-v1/v2/v3.json has no translation.
  */
 export const contentRu: Record<string, string> = {
+  // ---- funnel title (page title and header) ----
+  "Find your team's operating style": 'Найдите стиль работы вашей команды',
   // ---- intro (A) ----
   'Team operating-style check': 'Проверка стиля работы команды',
   'Build a work model your team can actually follow': 'Постройте модель работы, которой команда действительно будет следовать',

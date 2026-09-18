@@ -2,6 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { I18nProvider } from './i18n';
+import '@fontsource-variable/onest';
+import '@fontsource-variable/geologica';
 import './styles.css';
 
 const root = document.getElementById('root');

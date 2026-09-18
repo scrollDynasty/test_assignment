@@ -134,6 +134,7 @@ export function AdminPage() {
                 <pre>{activeConfig}</pre>
               </details>
             )}
+            <div className="table-wrap">
             <table>
               <thead>
                 <tr>
@@ -168,6 +169,7 @@ export function AdminPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </section>
 
           <section className="card">
@@ -190,6 +192,7 @@ export function AdminPage() {
 
           <section className="card">
             <h2>{t('admin.log')}</h2>
+            <div className="table-wrap">
             <table>
               <thead>
                 <tr><th>#</th><th>{t('admin.colAction')}</th><th>{t('admin.colFrom')}</th><th>{t('admin.colTo')}</th><th>{t('admin.colBy')}</th><th>{t('admin.colWhen')}</th></tr>
@@ -203,6 +206,7 @@ export function AdminPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </section>
         </>
       )}
