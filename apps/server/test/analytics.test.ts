@@ -262,7 +262,7 @@ describe('TZ 7.1 test 5 — analytics over unique sessions', () => {
     const ctx = await buildFixture();
     const r = await report(ctx);
 
-    expect(r.filters).toEqual({ funnelId: FUNNEL, version: 1, utmCampaign: null, includeOverrides: false });
+    expect(r.filters).toEqual({ funnelId: FUNNEL, version: 1, utmCampaign: null, includeOverrides: false, inProgressMinutes: 30 });
     expect(r.availableVersions).toEqual([1]);
     expect(r.availableCampaigns).toEqual(['spring', 'summer']);
 
@@ -405,6 +405,18 @@ describe('TZ 7.1 test 5 — analytics over unique sessions', () => {
     expect(after.selected).toEqual(base.selected);
     expect(after.versions).toEqual(base.versions);
     expect(after.ingestion.rawEvents).toBe(base.ingestion.rawEvents + repeats.length);
+  });
+
+  it('in_progress_minutes=0 turns every unfinished session into a drop-off; the invariant still holds', async () => {
+    const ctx = await buildFixture();
+    const live = variant(await report(ctx), 'A');
+    const off = variant(await report(ctx, { in_progress_minutes: '0' }), 'A');
+    expect(live.inProgress).toBe(1);
+    expect(off.inProgress).toBe(0);
+    const drops = (v: VariantReport) => v.steps.reduce((s, r) => s + r.dropoff, 0) + v.beforeFirstStep;
+    expect(drops(off)).toBe(drops(live) + 1);
+    expect(off.invariantOk).toBe(true);
+    expect(off.reachedResult).toBe(live.reachedResult);
   });
 
   it('is invariant to arrival order, seq and clocks (3 seeded shuffles into fresh DBs)', async () => {

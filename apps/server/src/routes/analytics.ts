@@ -12,6 +12,7 @@ const Query = z.object({
     .optional()
     .transform((v) => (v === undefined || v === '' ? undefined : v)),
   include_overrides: z.enum(['true', 'false']).default('false'),
+  in_progress_minutes: z.coerce.number().int().min(0).max(1440).default(30),
 });
 
 /**
@@ -28,6 +29,7 @@ export const analyticsRoutes =
         version: q.version,
         utmCampaign: q.utm_campaign,
         includeOverrides: q.include_overrides === 'true',
+        inProgressMinutes: q.in_progress_minutes,
       });
     });
   };

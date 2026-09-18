@@ -9,6 +9,8 @@ export interface AnalyticsFilters {
   version?: number | undefined;
   utmCampaign?: string | undefined;
   includeOverrides: boolean;
+  /** Sessions active within this many minutes are "in progress", not drop-offs. Default 30; 0 = off. */
+  inProgressMinutes?: number | undefined;
 }
 
 export interface SummaryMetrics {
@@ -101,7 +103,7 @@ export interface IngestionQuality {
 
 export interface AnalyticsReport {
   generatedAt: string;
-  filters: { funnelId: string; version: number | null; utmCampaign: string | null; includeOverrides: boolean };
+  filters: { funnelId: string; version: number | null; utmCampaign: string | null; includeOverrides: boolean; inProgressMinutes: number };
   availableVersions: number[];
   availableCampaigns: string[];
   versions: VersionRow[];

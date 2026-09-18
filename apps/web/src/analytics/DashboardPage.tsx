@@ -22,6 +22,7 @@ export function DashboardPage() {
   const version = params.get('version') ?? '';
   const campaign = params.get('utm_campaign') ?? '';
   const includeOverrides = params.get('include_overrides') === 'true';
+  const inProgressWindow = params.get('in_progress_minutes') ?? '30';
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -29,6 +30,7 @@ export function DashboardPage() {
     if (version) q.set('version', version);
     if (campaign) q.set('utm_campaign', campaign);
     if (includeOverrides) q.set('include_overrides', 'true');
+    q.set('in_progress_minutes', inProgressWindow);
     try {
       setReport(await api.request<AnalyticsReport>('GET', `/api/analytics?${q.toString()}`));
       setError(null);
@@ -37,7 +39,7 @@ export function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [version, campaign, includeOverrides]);
+  }, [version, campaign, includeOverrides, inProgressWindow]);
 
   useEffect(() => {
     void load();
@@ -79,6 +81,14 @@ export function DashboardPage() {
               ))}
             </select>
           </label>
+          <label title="Unfinished sessions active within this window are shown as in progress instead of drop-off">
+            In progress if active within
+            <select value={inProgressWindow} onChange={(e) => setFilter('in_progress_minutes', e.target.value === '30' ? '' : e.target.value)}>
+              <option value="30">30 min (live traffic)</option>
+              <option value="0">off: every unfinished session is a drop-off</option>
+              <option value="1440">24 hours</option>
+            </select>
+          </label>
           <label className="check">
             <input type="checkbox" checked={includeOverrides} onChange={(e) => setFilter('include_overrides', e.target.checked ? 'true' : '')} />
             Include forced ?variant= sessions
@@ -109,8 +119,8 @@ export function DashboardPage() {
             <h2>Funnel by step</h2>
             <p className="muted">
               Step order is the variant&apos;s own. <b>Conversion</b> = passed / viewed. <b>Reach</b> = viewed / started.
-              <b> Drop-off</b> = sessions whose furthest step was this one and that did not reach the result (sessions active in
-              the last 30 minutes are &quot;in progress&quot;, not drop-off). Conditional steps are only shown to part of the users.
+              <b> Drop-off</b> = sessions whose furthest step was this one and that did not reach the result (sessions active within
+              the selected window are &quot;in progress&quot;, not drop-off). Conditional steps are only shown to part of the users.
             </p>
             <div className="variant-grid">
               {variantEntries.map(([name, v]) => (
