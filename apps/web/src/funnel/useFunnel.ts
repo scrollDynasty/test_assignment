@@ -13,6 +13,7 @@ import {
 } from '@funnel/shared';
 import { ApiError, api } from '../lib/api';
 import { storage } from '../lib/storage';
+import { dissolve } from '../lib/transition';
 import { createTracker, type Tracker } from '../lib/tracker';
 
 const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'] as const;
@@ -257,8 +258,11 @@ export function useFunnel(funnelId: string): FunnelView {
       if (!session) return;
       const updated: SessionDto = { ...session, state: next };
       sessionRef.current = updated;
-      setLoad({ kind: 'ready', session: updated });
-      setNavId((n) => n + 1);
+      // Only the rendering is animated; the state, the save and the events happen right away.
+      dissolve(() => {
+        setLoad({ kind: 'ready', session: updated });
+        setNavId((n) => n + 1);
+      });
       pendingRef.current = next;
       storage.setJson(pendingKey(session.sessionId), next);
       void flush();

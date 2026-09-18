@@ -141,16 +141,35 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
 
 .funnel { width: 100%; max-width: 640px; margin: 0 auto; padding: clamp(16px, 7vh, 72px) 16px 64px; }
 
-.stepbar { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; min-height: 32px; margin-bottom: 28px; }
+.stepbar { display: flex; align-items: center; min-height: 32px; margin-bottom: 28px; view-transition-name: stepbar; }
 .back { background: none; border: none; padding: 6px 0; color: var(--muted); font-size: 15px; }
 .back:hover { color: var(--ink); }
-.progress { display: flex; gap: 4px; height: 4px; }
-.progress > span { flex: 1; border-radius: 2px; background: var(--line); transition: background-color 0.3s ease; }
-.progress > span.on { background: var(--accent); }
-.progress-label { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-.step-slot { animation: step-in 0.28s cubic-bezier(0.2, 0.7, 0.2, 1); }
-@keyframes step-in { from { opacity: 0.001; transform: translateY(8px); } }
+/*
+ * Step change = "dissolve": the answered screen evaporates (fades, blurs, drifts up a little and grows slightly),
+ * then the next one condenses out of the same haze. No sideways movement and no progress bar filling up, so the
+ * transition says "next" without saying "how many are left". Driven by the View Transitions API
+ * (lib/transition.ts); the rest of the page (header, language switch) stays still.
+ */
+.step-slot { view-transition-name: step; }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+::view-transition-group(step) { animation-duration: 0.62s; }
+::view-transition-old(step) { animation: evaporate 0.3s cubic-bezier(0.4, 0, 1, 1) both; }
+::view-transition-new(step) { animation: condense 0.42s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both; }
+::view-transition-old(stepbar) { animation: fade-out 0.2s ease both; }
+::view-transition-new(stepbar) { animation: fade-in 0.3s ease 0.3s both; }
+@keyframes evaporate {
+  to { opacity: 0; filter: blur(12px); transform: translateY(-14px) scale(1.02); }
+}
+@keyframes condense {
+  from { opacity: 0; filter: blur(10px); transform: translateY(10px) scale(0.985); }
+}
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes fade-in { from { opacity: 0; } }
+/* Browsers without view transitions: the new screen still condenses in (the old one just disappears). */
+@supports not (view-transition-name: none) {
+  .step-slot { animation: condense 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+}
 
 .step h1 { font-size: clamp(26px, 4.4vw, 36px); line-height: 1.15; font-weight: 600; margin: 0 0 12px; }
 .step h1:focus { outline: none; }
@@ -244,11 +263,12 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
   padding: 16px 0;
   border-bottom: 1px solid var(--line);
   line-height: 1.5;
-  animation: step-in 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  animation: condense 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
-.recommendations li:nth-child(2) { animation-delay: 0.06s; }
-.recommendations li:nth-child(3) { animation-delay: 0.12s; }
-.recommendations li:nth-child(4) { animation-delay: 0.18s; }
+.recommendations li:nth-child(2) { animation-delay: 0.09s; }
+.recommendations li:nth-child(3) { animation-delay: 0.18s; }
+.recommendations li:nth-child(4) { animation-delay: 0.27s; }
+.recommendations li:nth-child(n + 5) { animation-delay: 0.36s; }
 .recommendations li::before { content: counter(rec, decimal-leading-zero); font-family: var(--font-display); font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
 
 .meta { color: var(--faint); font-size: 12px; margin-top: 48px; }

@@ -61,33 +61,14 @@ export function FunnelPage() {
 
   const answer = isInteractive(step) ? session.state.answers[step.input.name] : undefined;
   const common = { initial: answer, onSubmit: view.submit, onChange: view.clearError, invalid: Boolean(error) && error !== 'session_gone' };
-  const showProgress = progress !== null && progress.count > 0 && step.type !== 'info' && step.type !== 'result';
 
   return (
     <Shell title={tc(session.funnel.title)}>
+      {/* No "question N of M" on purpose: visitors do not see how many steps remain (a product decision, see
+          WORKLOG). Progress is still computed by the engine and sent with step_viewed for analytics. */}
       <div className="stepbar">
-        {view.canGoBack && step.type !== 'result' ? (
+        {view.canGoBack && step.type !== 'result' && (
           <button className="back" onClick={view.back}>{t('funnel.back')}</button>
-        ) : (
-          <span />
-        )}
-        {showProgress && (
-          <>
-            {/* One segment per visible question: a branch that opens a question adds a segment. */}
-            <div
-              className="progress"
-              role="progressbar"
-              aria-label={t('funnel.progressLabel')}
-              aria-valuemin={0}
-              aria-valuemax={progress.count}
-              aria-valuenow={progress.index}
-            >
-              {Array.from({ length: progress.count }, (_, i) => (
-                <span key={i} className={i < progress.index ? 'on' : ''} />
-              ))}
-            </div>
-            <span className="progress-label">{t('funnel.progress', { index: progress.index, count: progress.count })}</span>
-          </>
         )}
       </div>
 
