@@ -18,7 +18,12 @@ async function request<T>(method: string, path: string, body?: unknown, headers:
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const text = await res.text();
-  const json: unknown = text ? JSON.parse(text) : null;
+  let json: unknown = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    // Not JSON (e.g. a proxy's HTML error page): keep the status, drop the body.
+  }
   if (!res.ok) {
     const err = (json ?? {}) as { error?: string; message?: string; details?: unknown };
     throw new ApiError(res.status, err.error ?? 'http_error', err.message ?? res.statusText, err.details);

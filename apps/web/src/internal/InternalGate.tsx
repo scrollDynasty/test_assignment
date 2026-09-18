@@ -37,7 +37,7 @@ export function InternalGate({ children }: { children: ReactNode }) {
     }
   }, [key, t]);
 
-  if (status === 'checking') return <div className="spinner" />;
+  if (status === 'checking') return <div className="spinner" role="status" aria-label={t('funnel.loading')} />;
   if (status === 'in') return <>{children}</>;
   return (
     <div className="page">

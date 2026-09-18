@@ -3,10 +3,13 @@ export const en = {
   // funnel
   'funnel.continue': 'Continue',
   'funnel.back': '← Back',
+  'funnel.progressLabel': 'Progress',
+  'funnel.swipeHint': 'Swipe right to go back',
   'theme.toDark': 'Switch to dark theme',
   'theme.toLight': 'Switch to light theme',
   'funnel.selected': '{n} / {max} selected',
   'funnel.loadError': 'We could not load this page',
+  'funnel.loadErrorHelp': 'Check your internet connection and try again.',
   'funnel.tryAgain': 'Try again',
   'funnel.saveError': 'Your progress could not be saved. Check your connection.',
   'funnel.meta': 'v{version} · variant {variant}',
@@ -59,7 +62,7 @@ export const en = {
   'dash.ctrHint': 'CTA clicks / sessions that reached the result',
   'dash.startToCta': 'Start → CTA',
   'dash.startToCtaHint': 'Primary metric',
-  'dash.back': 'Used Back',
+  'dash.back': 'Went back',
   'dash.invariant': 'drop-offs + before first step ({before}) + reached + in progress = started = sessions in the database ({table}) · server-completed: {server}',
   'dash.abTitle': 'A/B test · primary metric: start → CTA',
   'dash.abDiff': 'Difference {b} − {a}',
@@ -106,8 +109,6 @@ export const en = {
   'admin.title': 'Versions',
   'admin.subtitle':
     'Publishing changes only which version new sessions start on. Sessions already in progress stay on the version they started with, also after a rollback.',
-  'admin.token': 'Admin token',
-  'admin.wrongToken': 'Wrong admin token',
   'admin.active': 'Active version:',
   'admin.rollback': 'Roll back last publish',
   'admin.rollbackConfirm': 'Roll back the last publish? Sessions already started stay on their version.',
@@ -138,7 +139,6 @@ export const en = {
   'admin.action.publish': 'publish',
   'admin.action.rollback': 'rollback',
   'admin.wrongFunnel': 'This page manages "{expected}", the file is for "{actual}"',
-  'admin.enterToken': 'Enter the admin token to manage versions.',
   'lang.switch': 'Language',
 } as const;
 
@@ -147,10 +147,13 @@ export type UiKey = keyof typeof en;
 export const ru: Record<UiKey, string> = {
   'funnel.continue': 'Далее',
   'funnel.back': '← Назад',
+  'funnel.progressLabel': 'Прогресс',
+  'funnel.swipeHint': 'Свайп вправо — назад',
   'theme.toDark': 'Включить тёмную тему',
   'theme.toLight': 'Включить светлую тему',
   'funnel.selected': 'Выбрано {n} из {max}',
   'funnel.loadError': 'Не удалось загрузить страницу',
+  'funnel.loadErrorHelp': 'Проверьте подключение к интернету и попробуйте ещё раз.',
   'funnel.tryAgain': 'Попробовать ещё раз',
   'funnel.saveError': 'Не удалось сохранить прогресс. Проверьте подключение к интернету.',
   'funnel.meta': 'v{version} · вариант {variant}',
@@ -201,7 +204,7 @@ export const ru: Record<UiKey, string> = {
   'dash.ctrHint': 'Клики по кнопке / сессии, дошедшие до результата',
   'dash.startToCta': 'Старт → кнопка',
   'dash.startToCtaHint': 'Основная метрика',
-  'dash.back': 'Нажимали «назад»',
+  'dash.back': 'Возвращались назад',
   'dash.invariant': 'отвалы + до первого экрана ({before}) + дошли + в процессе = начали = сессий в базе ({table}) · завершили по данным сервера: {server}',
   'dash.abTitle': 'A/B-тест · основная метрика: старт → кнопка',
   'dash.abDiff': 'Разница {b} − {a}',
@@ -247,8 +250,6 @@ export const ru: Record<UiKey, string> = {
   'admin.title': 'Версии',
   'admin.subtitle':
     'Публикация меняет только то, на какой версии начинают новые сессии. Уже начатые сессии остаются на своей версии — и после отката тоже.',
-  'admin.token': 'Токен админки',
-  'admin.wrongToken': 'Неверный токен админки',
   'admin.active': 'Активная версия:',
   'admin.rollback': 'Откатить последнюю публикацию',
   'admin.rollbackConfirm': 'Откатить последнюю публикацию? Уже начатые сессии останутся на своей версии.',
@@ -279,6 +280,5 @@ export const ru: Record<UiKey, string> = {
   'admin.action.publish': 'публикация',
   'admin.action.rollback': 'откат',
   'admin.wrongFunnel': 'Эта страница управляет «{expected}», а файл — для «{actual}»',
-  'admin.enterToken': 'Введите токен админки, чтобы управлять версиями.',
   'lang.switch': 'Язык',
 };

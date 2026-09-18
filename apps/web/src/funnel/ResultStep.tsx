@@ -53,7 +53,7 @@ export function ResultStep({ step, sessionId, tracker, whenSaved, onRestart }: P
     tracker.track('result_viewed', step.id, { result_id: phase.resultId });
   }, [phase, tracker, sessionId, step.id, attempt]);
 
-  // Iteration 2 (v3): `recommendation_expanded` — "the user opens the detailed recommendation after the result CTA".
+  // `recommendation_expanded` (declared by v3) — "the user opens the detailed recommendation after the result CTA".
   // Sent when the expanded list has actually rendered, once per result. The tracker drops it for sessions whose
   // pinned version does not declare the event (v1/v2), so shipping this code before publishing v3 is safe.
   const expandedSent = useRef<string | null>(null);
@@ -69,18 +69,25 @@ export function ResultStep({ step, sessionId, tracker, whenSaved, onRestart }: P
     });
   }, [expanded, phase, tracker, sessionId, step.id]);
 
+  // "Calculating…" → result (or error) is a change of screen without a navigation: move focus to the new heading
+  // so keyboard and screen-reader users land on the result, like on every other step.
+  const phaseKind = phase.kind;
+  useEffect(() => {
+    if (phaseKind !== 'loading') document.querySelector<HTMLElement>('.result h1')?.focus();
+  }, [phaseKind]);
+
   if (phase.kind === 'loading') {
     return (
       <div className="step result" aria-busy="true">
-        <h1>{step.content.loadingTitle ? tc(step.content.loadingTitle) : t('funnel.loading')}</h1>
-        <div className="spinner" />
+        <h1 tabIndex={-1}>{step.content.loadingTitle ? tc(step.content.loadingTitle) : t('funnel.loading')}</h1>
+        <div className="spinner" role="status" aria-label={t('funnel.loading')} />
       </div>
     );
   }
   if (phase.kind === 'error') {
     return (
       <div className="step result">
-        <h1>{step.content.errorTitle ? tc(step.content.errorTitle) : t('funnel.loadError')}</h1>
+        <h1 tabIndex={-1}>{step.content.errorTitle ? tc(step.content.errorTitle) : t('funnel.loadError')}</h1>
         <div className="actions">
           <button className="primary" onClick={() => setAttempt((a) => a + 1)}>
             {step.content.retryLabel ? tc(step.content.retryLabel) : t('funnel.tryAgain')}
@@ -102,7 +109,7 @@ export function ResultStep({ step, sessionId, tracker, whenSaved, onRestart }: P
   return (
     <div className="step result">
       <p className="eyebrow">{t('funnel.resultEyebrow')}</p>
-      <h1>{tc(result.title)}</h1>
+      <h1 tabIndex={-1}>{tc(result.title)}</h1>
       {result.summary && <p className="body">{tc(result.summary)}</p>}
       {expanded && result.recommendations && (
         <ol className="recommendations">

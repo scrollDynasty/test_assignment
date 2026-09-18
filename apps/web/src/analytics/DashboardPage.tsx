@@ -20,7 +20,8 @@ export function DashboardPage() {
   const requestSeq = useRef(0);
   const [params, setParams] = useSearchParams();
   const [report, setReport] = useState<AnalyticsReport | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  /** A failed load is stored as a flag and translated on render, so switching language does not refetch. */
+  const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const version = params.get('version') ?? '';
@@ -40,16 +41,16 @@ export function DashboardPage() {
       const next = await api.request<AnalyticsReport>('GET', `/api/analytics?${q.toString()}`);
       if (seq !== requestSeq.current) return;
       setReport(next);
-      setError(null);
+      setError(false);
     } catch (e) {
       if (seq !== requestSeq.current) return;
       // The 8-hour login expired: reload so the gate shows the login form instead of a raw error.
       if (e instanceof ApiError && e.status === 401) return window.location.reload();
-      setError(t('dash.loadError'));
+      setError(true);
     } finally {
       if (seq === requestSeq.current) setLoading(false);
     }
-  }, [version, campaign, includeOverrides, inProgressWindow, t]);
+  }, [version, campaign, includeOverrides, inProgressWindow]);
 
   useEffect(() => {
     void load();
@@ -108,8 +109,8 @@ export function DashboardPage() {
         </div>
       </header>
 
-      {error && <p className="error">{error}</p>}
-      {!report && !error && <div className="spinner" />}
+      {error && <p className="error">{t('dash.loadError')}</p>}
+      {!report && !error && <div className="spinner" role="status" aria-label={t('funnel.loading')} />}
 
       {report && selected && report.filters.inProgressMinutes > 0 && inProgressTotal > 0 && (
         <p className="notice">

@@ -57,10 +57,10 @@ export function AdminPage() {
     } catch (e) {
       // The internal login expired: reload so the gate shows the login form.
       if (e instanceof ApiError && e.status === 401) return window.location.reload();
-      setData(null);
+      // Keep what is already on screen; only report the failure.
       setMessage({ kind: 'error', text: e instanceof Error ? e.message : String(e) });
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -107,6 +107,7 @@ export function AdminPage() {
 
       {message && <pre className={`message ${message.kind}`}>{message.text}</pre>}
 
+      {!data && !message && <div className="spinner" role="status" aria-label={t('funnel.loading')} />}
       {data && (
         <>
           <section className="card">

@@ -264,16 +264,20 @@ export function useFunnel(funnelId: string): FunnelView {
   }, [adoptServer]);
 
   const commit = useCallback(
-    (next: SessionState) => {
+    (next: SessionState, direction: 'forward' | 'back' = 'forward') => {
       const session = sessionRef.current;
       if (!session) return;
       const updated: SessionDto = { ...session, state: next };
       sessionRef.current = updated;
-      // Only the rendering is animated; the state, the save and the events happen right away.
-      dissolve(() => {
-        setLoad({ kind: 'ready', session: updated });
-        setNavId((n) => n + 1);
-      });
+      // Only the rendering is animated; the state, the save and the events happen right away. The rendered session
+      // is read when the (possibly queued) transition runs: a server copy adopted in between must not be overwritten.
+      dissolve(
+        () => {
+          setLoad({ kind: 'ready', session: sessionRef.current ?? updated });
+          setNavId((n) => n + 1);
+        },
+        direction === 'back' ? 'back' : undefined,
+      );
       pendingRef.current = next;
       storage.setJson(pendingKey(session.sessionId), next);
       void flush();
@@ -360,7 +364,7 @@ export function useFunnel(funnelId: string): FunnelView {
       setError(null);
       tracker.track('back_clicked', state.currentStepId, { destination_step_id: destination });
       window.history.replaceState({ funnelSession: session.sessionId, step: destination, depth: target.depth } satisfies HistoryMarker, '', urlFor(destination));
-      commit({ answers: state.answers, history: state.history.slice(0, target.depth), currentStepId: destination });
+      commit({ answers: state.answers, history: state.history.slice(0, target.depth), currentStepId: destination }, 'back');
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
