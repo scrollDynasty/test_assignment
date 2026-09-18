@@ -41,15 +41,17 @@ import type { VersionsService } from './versions.js';
  *               are never used, so the result is independent of event order by construction. Going back
  *               does not move it backwards: the furthest step ever seen is where the user stopped.
  *  inProgress   not reachedResult AND session not expired (expires_at > now) AND the session's last event
- *               arrived less than 30 minutes ago (server_ts > now − 30 min).
+ *               arrived within the in-progress window (default 30 min, a report parameter; 0 turns it off).
  *  dropoff(s)   not reachedResult, not inProgress, and furthest step = s. Sessions with no viewed step go
  *               to `beforeFirstStep`. Every session lands in exactly one bucket, so
- *               Σ dropoff + beforeFirstStep + reachedResult + inProgress = started (`invariantOk`).
+ *               Σ dropoff + beforeFirstStep + reachedResult + inProgress = started. `invariantOk` also requires
+ *               started (from events) = sessions of the same filter counted in the sessions table, which is
+ *               independent of the event pipeline and fails if a session_started is lost or duplicated.
  *  ctaClicked   sessions with cta_clicked. ctr = ctaClicked / reachedResult; startToCta = ctaClicked /
  *               started (primary A/B metric); completion = reachedResult / started.
  *  backRate     sessions with back_clicked / started.
- *  resultMix    per session one result_id (json property of result_viewed / cta_clicked; the latest by
- *               server_ts, ties broken by event_id so the choice is deterministic), counted per result.
+ *  resultMix    per session one result_id: the one the server computed (sessions.result_id); for sessions
+ *               without it, the latest result_id of result_viewed / cta_clicked by client seq.
  *  serverCompleted  sessions of the population with sessions.status = 'completed' (the server computed a
  *               result) — a cross-check for reachedResult, which comes from client events.
  *  stepConversion   passed(s) / viewed(s): of the sessions that saw the step, the share that got past it.
@@ -59,8 +61,8 @@ import type { VersionsService } from './versions.js';
  * Rates with a zero denominator are null.
  */
 
-/** Default "in progress" window; the report accepts another one (0 = every unfinished session is a drop-off). */
-export const IN_PROGRESS_WINDOW_MS = 30 * 60 * 1000;
+/** Default "in progress" window in minutes; the report accepts another one (0 = every unfinished session is a drop-off). */
+export const DEFAULT_IN_PROGRESS_MINUTES = 30;
 
 /** Report clock: "now" and the in-progress window. */
 interface Clock {
@@ -119,7 +121,7 @@ export class AnalyticsService {
 
   report(filters: AnalyticsFilters): AnalyticsReport {
     const now = this.now();
-    const clock: Clock = { now, windowMs: (filters.inProgressMinutes ?? 30) * 60 * 1000 };
+    const clock: Clock = { now, windowMs: (filters.inProgressMinutes ?? DEFAULT_IN_PROGRESS_MINUTES) * 60 * 1000 };
     const versionRows = this.db
       .prepare('SELECT version, experiment_id AS experimentId FROM funnel_versions WHERE funnel_id = ? ORDER BY version')
       .all(filters.funnelId) as { version: number; experimentId: string }[];
@@ -141,7 +143,8 @@ export class AnalyticsService {
     let selected: SelectedReport | null = null;
     if (selectedVersion !== null) {
       const config = this.versions.getConfig(filters.funnelId, selectedVersion);
-      selected = this.selectedReport(config, facts.filter((f) => f.version === selectedVersion), where, params, clock);
+      const inTable = this.sessionCounts(filters, selectedVersion);
+      selected = this.selectedReport(config, facts.filter((f) => f.version === selectedVersion), where, params, clock, inTable);
     }
 
     return {
@@ -151,7 +154,7 @@ export class AnalyticsService {
         version: selectedVersion,
         utmCampaign: filters.utmCampaign ?? null,
         includeOverrides: filters.includeOverrides,
-        inProgressMinutes: filters.inProgressMinutes ?? 30,
+        inProgressMinutes: filters.inProgressMinutes ?? DEFAULT_IN_PROGRESS_MINUTES,
       },
       availableVersions: versionRows.map((v) => v.version),
       availableCampaigns: (
@@ -175,6 +178,25 @@ export class AnalyticsService {
     }
     if (!filters.includeOverrides) clauses.push(`e.assignment = 'hash'`);
     return { where: clauses.join(' AND '), params };
+  }
+
+  /** Sessions per variant straight from the sessions table (no events involved): the cross-check for `started`. */
+  private sessionCounts(filters: AnalyticsFilters, version: number): Map<string, number> {
+    const rows = this.db
+      .prepare(
+        `SELECT variant, COUNT(*) AS n FROM sessions
+         WHERE funnel_id = @funnelId AND funnel_version = @version
+           AND (@utmCampaign IS NULL OR utm_campaign = @utmCampaign)
+           AND (@includeOverrides = 1 OR assignment = 'hash')
+         GROUP BY variant`,
+      )
+      .all({
+        funnelId: filters.funnelId,
+        version,
+        utmCampaign: filters.utmCampaign ?? null,
+        includeOverrides: filters.includeOverrides ? 1 : 0,
+      }) as { variant: string; n: number }[];
+    return new Map(rows.map((r) => [r.variant, r.n]));
   }
 
   /** Set extraction in SQL (grouped per session); all per-session logic stays in TypeScript. */
@@ -255,11 +277,20 @@ export class AnalyticsService {
     return [...facts.values()];
   }
 
-  private selectedReport(config: FunnelConfig, facts: SessionFacts[], where: string, params: Params, clock: Clock): SelectedReport {
+  private selectedReport(
+    config: FunnelConfig,
+    facts: SessionFacts[],
+    where: string,
+    params: Params,
+    clock: Clock,
+    inTable: Map<string, number>,
+  ): SelectedReport {
     const variantIds = Object.keys(config.experiment.variants).sort();
     const variants: Record<string, VariantReport> = {};
     for (const variant of variantIds) {
-      variants[variant] = variantReport(resolveVariant(config, variant), facts.filter((f) => f.variant === variant), clock);
+      const report = variantReport(resolveVariant(config, variant), facts.filter((f) => f.variant === variant), clock);
+      const sessionsInTable = inTable.get(variant) ?? 0;
+      variants[variant] = { ...report, sessionsInTable, invariantOk: report.invariantOk && report.started === sessionsInTable };
     }
 
     const otherRows = this.db
@@ -342,7 +373,8 @@ function summarize(facts: SessionFacts[], clock: Clock): SummaryMetrics {
   };
 }
 
-function variantReport(funnel: ResolvedFunnel, facts: SessionFacts[], clock: Clock): VariantReport {
+/** Everything except the sessions-table cross-check, which the caller adds. */
+function variantReport(funnel: ResolvedFunnel, facts: SessionFacts[], clock: Clock): Omit<VariantReport, 'sessionsInTable'> {
   const summary = summarize(facts, clock);
   const position = new Map(funnel.sequence.map((id, i) => [id, i] as const));
   const resultStepIds = funnel.sequence.filter((id) => funnel.steps[id]?.type === 'result');

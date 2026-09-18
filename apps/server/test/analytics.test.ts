@@ -420,6 +420,17 @@ describe('TZ 7.1 test 5 — analytics over unique sessions', () => {
     expect(off.reachedResult).toBe(live.reachedResult);
   });
 
+  it('the invariant can fail: a session whose session_started never arrived is caught by the sessions-table count', async () => {
+    const ctx = await buildFixture();
+    const before = variant(await report(ctx), 'A');
+    expect(before.sessionsInTable).toBe(before.started);
+    ctx.db.prepare("DELETE FROM events WHERE session_id = ? AND name = 'session_started'").run(ctx.sessionIds.get('a1'));
+    const after = variant(await report(ctx), 'A');
+    expect(after.started).toBe(before.started - 1);
+    expect(after.sessionsInTable).toBe(before.started);
+    expect(after.invariantOk).toBe(false);
+  });
+
   it('is invariant to arrival order, seq and clocks (3 seeded shuffles into fresh DBs)', async () => {
     const reference = await report(await buildFixture());
     for (const seed of [1, 42, 20260918]) {

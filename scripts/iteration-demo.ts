@@ -1,7 +1,7 @@
 /**
  * Reproducible "publish a new version, keep old sessions working, roll back" scenario (TZ §2, §8).
  *
- *   npm run demo:iteration -- --config funnel-v2.json [--url http://localhost:3000] [--traffic 150] [--out docs/iteration-1.md]
+ *   npm run demo:iteration -- --config funnel-v2.json [--url http://localhost:3000] [--traffic 150] [--out docs/iteration-1-demo.md]
  *
  * Everything goes through the public/admin HTTP API of a running instance — no redeploy, no DB access:
  *  1. schema fingerprint + analytics snapshot of every version;
@@ -29,6 +29,7 @@ import {
   type SessionDto,
   type Step,
 } from '../packages/shared/src/index.js';
+import { accessKey, intOption } from './lib.js';
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback?: string) => {
@@ -36,9 +37,13 @@ const opt = (name: string, fallback?: string) => {
   return i >= 0 && args[i + 1] ? (args[i + 1] as string) : fallback;
 };
 const API = (opt('url', process.env.API_URL ?? 'http://localhost:3000') as string).replace(/\/$/, '');
-const TOKEN = process.env.ADMIN_TOKEN ?? 'dev-admin-token';
+const TOKEN = accessKey(API);
+if (!TOKEN) {
+  console.error('ADMIN_TOKEN is required for a non-local --url');
+  process.exit(1);
+}
 const CONFIG_PATH = opt('config');
-const TRAFFIC = Number(opt('traffic', '0'));
+const TRAFFIC = intOption('traffic', opt('traffic', '0') as string);
 const OUT = opt('out');
 if (!CONFIG_PATH) {
   console.error('usage: iteration-demo --config <funnel-vN.json> [--url …] [--traffic N] [--out report.md]');

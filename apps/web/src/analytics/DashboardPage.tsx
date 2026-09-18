@@ -254,7 +254,7 @@ function Kpis({ name, v }: { name: string; v: VariantReport }) {
         <Kpi label={t('dash.back')} value={pct(v.backRate)} />
       </div>
       <p className={`muted small ${v.invariantOk ? '' : 'error'}`}>
-        {v.invariantOk ? '✓' : '✗'} {t('dash.invariant', { before: v.beforeFirstStep, server: v.serverCompleted })}
+        {v.invariantOk ? '✓' : '✗'} {t('dash.invariant', { before: v.beforeFirstStep, table: v.sessionsInTable, server: v.serverCompleted })}
       </p>
     </div>
   );

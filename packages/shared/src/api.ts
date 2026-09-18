@@ -37,18 +37,3 @@ export interface CreateSessionRequest {
   /** Page query parameters; the server reads the override from `experiment.overrideQueryParam` of the active version. */
   query?: Record<string, string>;
 }
-
-export interface SaveStateRequest {
-  state: SessionState;
-  rev: number;
-}
-
-export interface ResultDto {
-  resultId: string;
-}
-
-export interface ApiError {
-  error: string;
-  message: string;
-  details?: unknown;
-}
