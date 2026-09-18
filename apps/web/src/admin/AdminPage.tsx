@@ -38,6 +38,7 @@ export function AdminPage() {
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const [activeConfig, setActiveConfig] = useState<string | null>(null);
 
   const headers = { 'x-admin-token': token };
 
@@ -51,6 +52,10 @@ export function AdminPage() {
       ]);
       setData(versions);
       setSchema(s.schemaHash);
+      if (versions.activeVersion !== null) {
+        const cfg = await api.request<unknown>('GET', `/api/admin/funnels/${FUNNEL}/versions/${versions.activeVersion}`, undefined, h);
+        setActiveConfig(JSON.stringify(cfg, null, 2));
+      }
     } catch (e) {
       setData(null);
       setMessage({ kind: 'error', text: e instanceof ApiError && e.status === 401 ? 'Wrong admin token' : String(e) });
@@ -138,6 +143,12 @@ export function AdminPage() {
             <p className="muted small">
               DB schema fingerprint: <code>{schema}</code>
             </p>
+            {activeConfig && (
+              <details>
+                <summary>Active config (v{data.activeVersion}) as published</summary>
+                <pre>{activeConfig}</pre>
+              </details>
+            )}
             <table>
               <thead>
                 <tr><th>Version</th><th>Experiment</th><th>Release note</th><th>Uploaded</th><th>Hash</th><th /></tr>

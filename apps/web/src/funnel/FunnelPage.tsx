@@ -89,7 +89,7 @@ export function FunnelPage() {
         </p>
       )}
       <footer className="meta">
-        v{session.version} · variant {session.variant}
+        v{session.version} · variant {session.variant} · <a href="/analytics">analytics</a> · <a href="/admin">versions</a>
       </footer>
     </Shell>
   );
