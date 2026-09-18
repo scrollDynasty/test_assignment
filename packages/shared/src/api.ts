@@ -2,11 +2,11 @@ import type { ResolvedFunnel } from './config.js';
 import type { SessionState } from './engine.js';
 
 export interface Utm {
-  utm_source?: string | null;
-  utm_medium?: string | null;
-  utm_campaign?: string | null;
-  utm_content?: string | null;
-  utm_term?: string | null;
+  utm_source?: string | null | undefined;
+  utm_medium?: string | null | undefined;
+  utm_campaign?: string | null | undefined;
+  utm_content?: string | null | undefined;
+  utm_term?: string | null | undefined;
 }
 
 export type Assignment = 'hash' | 'override';
