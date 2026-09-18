@@ -82,9 +82,14 @@ docker run -p 8080:8080 -v funnel-data:/data --env-file .env funnel-runtime   # 
 | `PORT` | задаёт платформа; по умолчанию 8080 в образе |
 | `PUBLIC_RATE_LIMIT` | запросов в минуту с IP на публичный API, по умолчанию 600; запросы с ключом доступа (генератор, демо) не ограничиваются |
 
-**Railway:** `railway.json` задаёт сборку из `Dockerfile`, health-check `GET /api/health` (проверяет и БД), политику
-перезапуска и пересборку только при изменении кода (правка документации не перезапускает сайт). В настройках сервиса:
-volume с mount path `/data`, переменные `ADMIN_TOKEN` и `TRUST_PROXY=1`, одна реплика (SQLite — один процесс).
+**CI/CD:** GitHub Actions (`.github/workflows/ci.yml`) на каждый push и pull request: `npm ci`, typecheck, lint, тесты,
+сборка, `npm audit` зависимостей production. Railway следит за веткой `master` и с опцией «Wait for CI» выкатывает
+коммит только после зелёного CI.
+
+**Railway:** сборка из `Dockerfile`, health-check `GET /api/health` (проверяет и БД), перезапуск при сбое, пересборка
+только при изменении кода (правка документации не перезапускает сайт); те же настройки записаны в `railway.json`
+(Railway больше не подключает config-as-code к новым сервисам, поэтому они заданы и в интерфейсе). Volume с mount path
+`/data`, переменные `ADMIN_TOKEN` и `TRUST_PROXY=1`, одна реплика (SQLite — один процесс).
 Контейнер сам отдаёт `/data` пользователю `node` и работает не от root. Бэкапы — снапшоты volume в Railway
 (`npm run db:backup` делает целостную копию локально).
 
