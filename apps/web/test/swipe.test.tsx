@@ -46,9 +46,11 @@ describe('swipe right to go back', () => {
 
   it.each([
     ['too short', [60, 300], [110, 300]],
+    ['1 px short of the 80 px threshold', [60, 300], [139, 300]],
     ['mostly vertical (scrolling)', [100, 200], [180, 500]],
     ['leftwards', [300, 300], [100, 300]],
     ['from the screen edge (left to the OS back gesture)', [10, 300], [250, 300]],
+    ['starting 1 px inside the 24 px edge zone', [23, 300], [263, 300]],
   ] as const)('does nothing for a swipe that is %s, and puts the step back', (_label, from, to) => {
     const onBack = vi.fn();
     render(<Screen enabled onBack={onBack} />);
@@ -56,6 +58,13 @@ describe('swipe right to go back', () => {
     swipe(shell, [...from], [...to]);
     expect(onBack).not.toHaveBeenCalled();
     expect((shell.querySelector('.step-slot') as HTMLElement).style.transform).toBe('');
+  });
+
+  it('exactly at the thresholds it does go back: 80 px of travel, starting 24 px from the edge', () => {
+    const onBack = vi.fn();
+    render(<Screen enabled onBack={onBack} />);
+    swipe(screen.getByTestId('shell'), [24, 300], [104, 300]);
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 
   it('never fires while typing in a number field, or when going back is not possible', () => {

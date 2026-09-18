@@ -180,13 +180,20 @@ export function AdminPage() {
             <p className="muted small">{t('admin.uploadHelp')}</p>
             <input
               type="file"
+              aria-label={t('admin.fileLabel')}
               accept="application/json,.json"
               onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (file) setDraft(await file.text());
               }}
             />
-            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={t('admin.paste')} rows={8} />
+            <textarea
+              aria-label={t('admin.jsonLabel')}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={t('admin.paste')}
+              rows={8}
+            />
             <div className="row">
               <button className="btn" disabled={busy || !draft} onClick={() => void upload(false)}>{t('admin.upload')}</button>
               <button className="primary" disabled={busy || !draft} onClick={() => void upload(true)}>{t('admin.uploadPublish')}</button>

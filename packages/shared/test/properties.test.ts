@@ -39,9 +39,32 @@ const ruleOnConditional = resolveVariant(
   'A',
 );
 
+/**
+ * Likewise, every visibleWhen in v1–v3 looks at an always-visible question, so "a hidden answer never opens a later
+ * step" cannot fail on them. Here a new question is gated on the conditional office_days itself.
+ */
+const gateOnConditional = resolveVariant(
+  FunnelConfigSchema.parse(
+    mutated(1, (c) => {
+      c.steps.hub_access = {
+        id: 'hub_access',
+        type: 'single-select',
+        visibleWhen: { answer: 'office_days', operator: 'gte', value: 3 },
+        content: { title: 'Does the team share one office hub?' },
+        input: { name: 'hub_access', options: [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }] },
+        validation: { required: true },
+      };
+      const seq: string[] = c.experiment.variants.A.stepSequence;
+      seq.splice(seq.indexOf('office_days') + 1, 0, 'hub_access');
+    }),
+  ),
+  'A',
+);
+
 const FUNNELS = [
   ...([1, 2, 3] as const).flatMap((v) => (['A', 'B'] as const).map((variant) => ({ name: `v${v}/${variant}`, f: funnel(v, variant) }))),
   { name: 'v1/A + a result rule on the conditional office_days', f: ruleOnConditional },
+  { name: 'v1/A + a question gated on the conditional office_days', f: gateOnConditional },
 ];
 
 const questions = (f: ResolvedFunnel): InteractiveStep[] =>
@@ -135,11 +158,29 @@ describe.each(FUNNELS)('engine invariants on $name', ({ f }) => {
     );
   });
 
+  it('hidden answers never change which steps are visible (nor, therefore, navigation and progress)', () => {
+    fc.assert(
+      fc.property(completeAnswers(f), completeAnswers(f), fc.boolean(), (answers, other, drop) => {
+        const visible = computeVisibility(f, answers).visibleSteps;
+        const mixed: Answers = { ...answers };
+        for (const q of questions(f)) {
+          if (visible.includes(q.id)) continue;
+          if (drop) delete mixed[q.input.name];
+          else mixed[q.input.name] = other[q.input.name] as AnswerValue;
+        }
+        expect(computeVisibility(f, mixed).visibleSteps).toEqual(visible);
+      }),
+    );
+  });
+
   it('every generated answer passes validation; a number outside the configured range never does', () => {
     fc.assert(
       fc.property(completeAnswers(f), fc.integer({ min: 1, max: 10_000 }), (answers, offset) => {
         for (const q of questions(f)) {
           expect(validateAnswer(q, answers[q.input.name]).ok).toBe(true);
+          if (q.type === 'number' && q.input.step !== undefined) {
+            expect(validateAnswer(q, (q.input.min ?? 0) + q.input.step / 2).ok).toBe(false); // off the step grid
+          }
           if (q.type === 'number' && q.input.max !== undefined) expect(validateAnswer(q, q.input.max + offset).ok).toBe(false);
           if (q.type === 'number' && q.input.min !== undefined) expect(validateAnswer(q, q.input.min - offset).ok).toBe(false);
         }
@@ -148,7 +189,7 @@ describe.each(FUNNELS)('engine invariants on $name', ({ f }) => {
   });
 });
 
-describe('condition DSL (three-valued logic) laws', () => {
+describe('condition DSL laws', () => {
   const leaf: fc.Arbitrary<Condition> = fc.oneof(
     fc.record({ answer: fc.constantFrom('mode', 'missing'), operator: fc.constant('eq' as const), value: fc.constantFrom('remote', 'hybrid') }),
     fc.record({ answer: fc.constantFrom('hours', 'missing'), operator: fc.constantFrom('gt' as const, 'lte' as const), value: fc.integer({ min: 0, max: 40 }) }),
@@ -168,6 +209,36 @@ describe('condition DSL (three-valued logic) laws', () => {
     { mode: fc.constantFrom('remote', 'hybrid', 'office'), hours: fc.integer({ min: 0, max: 40 }), picks: fc.subarray(['focus', 'cost', 'speed']) },
     { requiredKeys: [] },
   );
+
+  // Double negation and De Morgan hold in two-valued logic too; the law that separates three-valued logic is
+  // monotonicity: once a condition is decided on partial answers, answering more questions cannot flip it.
+  // That is the product rule "a branch never opens (or closes) before its answer is given". `exists` is excluded:
+  // it is decided by the very presence of an answer.
+  const decidedLeaf: fc.Arbitrary<Condition> = leaf.filter((l) => !('operator' in l) || l.operator !== 'exists');
+  const decidedCondition: fc.Arbitrary<Condition> = fc.letrec((tie) => ({
+    node: fc.oneof(
+      { depthSize: 'small', withCrossShrink: true },
+      decidedLeaf,
+      fc.record({ all: fc.array(tie('node') as fc.Arbitrary<Condition>, { minLength: 1, maxLength: 3 }) }),
+      fc.record({ any: fc.array(tie('node') as fc.Arbitrary<Condition>, { minLength: 1, maxLength: 3 }) }),
+      fc.record({ not: tie('node') as fc.Arbitrary<Condition> }),
+    ),
+  })).node;
+  const fullAnswers: fc.Arbitrary<Answers> = fc.record({
+    mode: fc.constantFrom('remote', 'hybrid', 'office'),
+    hours: fc.integer({ min: 0, max: 40 }),
+    picks: fc.subarray(['focus', 'cost', 'speed']),
+  });
+
+  it('monotonic: a condition (or its negation) true on partial answers stays true when more questions are answered', () => {
+    fc.assert(
+      fc.property(decidedCondition, fullAnswers, fc.subarray(['mode', 'hours', 'picks']), (c, full, known) => {
+        const partial = Object.fromEntries(known.map((k) => [k, full[k] as AnswerValue])) as Answers;
+        if (evaluateCondition(c, partial)) expect(evaluateCondition(c, full)).toBe(true);
+        if (evaluateCondition({ not: c }, partial)) expect(evaluateCondition({ not: c }, full)).toBe(true);
+      }),
+    );
+  });
 
   it('double negation is the identity', () => {
     fc.assert(
