@@ -1,0 +1,20 @@
+# Weekly update pull requests; each one goes through CI before anything can be merged and deployed.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # Minor and patch updates of dev tooling in one PR instead of dozens.
+      dev-tooling:
+        dependency-type: development
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
