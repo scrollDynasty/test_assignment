@@ -3,7 +3,7 @@ import { buildApp } from '../src/app.js';
 import { openDb } from '../src/db.js';
 import { ADMIN, FUNNEL, uploadAndPublish } from './helpers.js';
 
-/** Internal area = analytics + version management (TZ: "внутренняя страница", "внутренний dashboard"). */
+/** Internal area = analytics + version management. */
 describe('internal area access', () => {
   async function setup() {
     let clock = Date.now();

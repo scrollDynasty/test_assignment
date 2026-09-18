@@ -6,7 +6,7 @@ import { buildApp } from '../src/app.js';
 import { openDb } from '../src/db.js';
 import { FUNNEL, configFile, createSession, uploadAndPublish } from './helpers.js';
 
-/** Hostile input on a public URL (found by the final code review). */
+/** Hostile input on a public URL. */
 async function app(opts: { trustProxy?: number } = {}): Promise<FastifyInstance> {
   const a = await buildApp({ db: openDb(':memory:'), adminToken: 'test-token', ...opts });
   await uploadAndPublish(a, 1);

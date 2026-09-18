@@ -49,12 +49,13 @@ const purge = () => {
 purge();
 setInterval(purge, 3600_000).unref();
 
-await app.listen({ port, host: '0.0.0.0' });
-
 // Graceful shutdown (deploys send SIGTERM): stop accepting, finish in-flight requests, close SQLite cleanly.
+// Registered before listen, so a SIGTERM during startup is handled too.
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     app.log.info({ signal }, 'shutting down');
+    // Never hang past the platform's grace period: exit anyway after 10 s.
+    setTimeout(() => process.exit(1), 10_000).unref();
     app
       .close()
       .catch((e: unknown) => app.log.error(e))
@@ -64,3 +65,5 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       });
   });
 }
+
+await app.listen({ port, host: '0.0.0.0' });
