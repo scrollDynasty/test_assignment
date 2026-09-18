@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '../i18n';
 import { ApiError, api } from '../lib/api';
-import { storage } from '../lib/storage';
 import { Nav } from '../Nav';
 
 const FUNNEL = 'workstyle-planner';
-const TOKEN_KEY = 'funnel:admin-token';
 
 interface VersionSummary {
   version: number;
@@ -32,9 +30,9 @@ interface VersionsResponse {
  * Internal page for versions: upload a config, publish it (no redeploy), roll back, see the release log.
  * The schema fingerprint is shown to demonstrate that none of these actions changes the database schema.
  */
+/** Authenticated by the internal session cookie (see InternalGate): no access key in page code or browser storage. */
 export function AdminPage() {
   const { t, lang } = useI18n();
-  const [token, setToken] = useState(storage.getJson<string>(TOKEN_KEY) ?? '');
   const [data, setData] = useState<VersionsResponse | null>(null);
   const [schema, setSchema] = useState<string | null>(null);
   const [activeConfig, setActiveConfig] = useState<string | null>(null);
@@ -42,28 +40,25 @@ export function AdminPage() {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const headers = { 'x-admin-token': token };
   const when = (iso: string) => new Date(iso).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-GB');
 
   const refresh = useCallback(async () => {
-    if (!token) return;
     try {
-      const h = { 'x-admin-token': token };
       const [versions, s] = await Promise.all([
-        api.request<VersionsResponse>('GET', `/api/admin/funnels/${FUNNEL}/versions`, undefined, h),
-        api.request<{ schemaHash: string }>('GET', '/api/admin/schema', undefined, h),
+        api.request<VersionsResponse>('GET', `/api/admin/funnels/${FUNNEL}/versions`),
+        api.request<{ schemaHash: string }>('GET', '/api/admin/schema'),
       ]);
       setData(versions);
       setSchema(s.schemaHash);
       if (versions.activeVersion !== null) {
-        const cfg = await api.request<unknown>('GET', `/api/admin/funnels/${FUNNEL}/versions/${versions.activeVersion}`, undefined, h);
+        const cfg = await api.request<unknown>('GET', `/api/admin/funnels/${FUNNEL}/versions/${versions.activeVersion}`);
         setActiveConfig(JSON.stringify(cfg, null, 2));
       }
     } catch (e) {
       setData(null);
       setMessage({ kind: 'error', text: e instanceof ApiError && e.status === 401 ? t('admin.wrongToken') : String(e) });
     }
-  }, [token, t]);
+  }, [t]);
 
   useEffect(() => {
     void refresh();
@@ -93,9 +88,9 @@ export function AdminPage() {
   const upload = (publish: boolean) =>
     run(async () => {
       const config = parseDraft();
-      const up = await api.request('POST', `/api/admin/funnels/${FUNNEL}/versions`, config, headers);
+      const up = await api.request('POST', `/api/admin/funnels/${FUNNEL}/versions`, config);
       if (!publish) return up;
-      return api.request('POST', `/api/admin/funnels/${FUNNEL}/versions/${config.version}/publish`, undefined, headers);
+      return api.request('POST', `/api/admin/funnels/${FUNNEL}/versions/${config.version}/publish`);
     }, publish ? t('admin.okUploadedPublished') : t('admin.okUploaded'));
 
   return (
@@ -106,22 +101,9 @@ export function AdminPage() {
           <h1>{t('admin.title')}</h1>
           <p className="muted">{t('admin.subtitle')}</p>
         </div>
-        <label className="token">
-          {t('admin.token')}
-          <input
-            type="password"
-            value={token}
-            onChange={(e) => {
-              setToken(e.target.value);
-              storage.setJson(TOKEN_KEY, e.target.value);
-            }}
-            placeholder="x-admin-token"
-          />
-        </label>
       </header>
 
       {message && <pre className={`message ${message.kind}`}>{message.text}</pre>}
-      {!token && <p className="notice">{t('admin.enterToken')}</p>}
 
       {data && (
         <>
@@ -134,7 +116,7 @@ export function AdminPage() {
                 disabled={busy}
                 onClick={() => {
                   if (window.confirm(t('admin.rollbackConfirm'))) {
-                    void run(() => api.request('POST', `/api/admin/funnels/${FUNNEL}/rollback`, undefined, headers), t('admin.okRolledBack'));
+                    void run(() => api.request('POST', `/api/admin/funnels/${FUNNEL}/rollback`), t('admin.okRolledBack'));
                   }
                 }}
               >
@@ -171,7 +153,7 @@ export function AdminPage() {
                           disabled={busy}
                           onClick={() =>
                             void run(
-                              () => api.request('POST', `/api/admin/funnels/${FUNNEL}/versions/${v.version}/publish`, undefined, headers),
+                              () => api.request('POST', `/api/admin/funnels/${FUNNEL}/versions/${v.version}/publish`),
                               t('admin.okPublished', { version: v.version }),
                             )
                           }

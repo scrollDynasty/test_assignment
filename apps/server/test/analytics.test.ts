@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { AnalyticsReport, SessionDto, VariantReport } from '@funnel/shared';
 import { buildApp } from '../src/app.js';
 import { openDb, type Db } from '../src/db.js';
-import { FUNNEL, uploadAndPublish } from './helpers.js';
+import { ADMIN, FUNNEL, uploadAndPublish } from './helpers.js';
 
 /*
  * TZ §7.1 "расчёт основных аналитических показателей".
@@ -235,7 +235,7 @@ async function buildFixture(seed?: number): Promise<Ctx> {
 
 async function report(ctx: Ctx, query: Record<string, string> = {}): Promise<AnalyticsReport> {
   const qs = new URLSearchParams({ funnelId: FUNNEL, ...query }).toString();
-  const res = await ctx.app.inject({ method: 'GET', url: `/api/analytics?${qs}` });
+  const res = await ctx.app.inject({ method: 'GET', url: `/api/analytics?${qs}`, headers: ADMIN });
   expect(res.statusCode, res.body).toBe(200);
   return res.json() as AnalyticsReport;
 }
@@ -498,10 +498,10 @@ describe('TZ 7.1 test 5 — analytics over unique sessions', () => {
 
   it('validates the query and answers 404 for unknown funnels/versions', async () => {
     const ctx = await buildFixture();
-    expect((await ctx.app.inject({ method: 'GET', url: '/api/analytics' })).statusCode).toBe(400);
-    expect((await ctx.app.inject({ method: 'GET', url: `/api/analytics?funnelId=${FUNNEL}&include_overrides=yes` })).statusCode).toBe(400);
-    expect((await ctx.app.inject({ method: 'GET', url: `/api/analytics?funnelId=${FUNNEL}&version=abc` })).statusCode).toBe(400);
-    expect((await ctx.app.inject({ method: 'GET', url: `/api/analytics?funnelId=${FUNNEL}&version=9` })).statusCode).toBe(404);
-    expect((await ctx.app.inject({ method: 'GET', url: '/api/analytics?funnelId=nope' })).statusCode).toBe(404);
+    expect((await ctx.app.inject({ method: 'GET', url: '/api/analytics', headers: ADMIN })).statusCode).toBe(400);
+    expect((await ctx.app.inject({ method: 'GET', url: `/api/analytics?funnelId=${FUNNEL}&include_overrides=yes`, headers: ADMIN })).statusCode).toBe(400);
+    expect((await ctx.app.inject({ method: 'GET', url: `/api/analytics?funnelId=${FUNNEL}&version=abc`, headers: ADMIN })).statusCode).toBe(400);
+    expect((await ctx.app.inject({ method: 'GET', url: `/api/analytics?funnelId=${FUNNEL}&version=9`, headers: ADMIN })).statusCode).toBe(404);
+    expect((await ctx.app.inject({ method: 'GET', url: '/api/analytics?funnelId=nope', headers: ADMIN })).statusCode).toBe(404);
   });
 });

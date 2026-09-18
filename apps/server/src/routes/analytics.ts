@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { Services } from '../app.js';
+import type { Auth } from '../auth.js';
 
 const Query = z.object({
   funnelId: z.string().min(1).max(128),
@@ -16,13 +17,13 @@ const Query = z.object({
 });
 
 /**
- * Public, read-only analytics report. No admin token by product decision: the response contains only
- * aggregated counts and rates over sessions — no session ids, answers or other personal data.
+ * Analytics report for the internal dashboard (TZ §5 "внутренний dashboard"): requires the internal login
+ * or the access key header (traffic generator --verify). Aggregates only — no session ids, no answers.
  */
 export const analyticsRoutes =
-  (services: Services): FastifyPluginAsync =>
+  (services: Services, auth: Auth): FastifyPluginAsync =>
   async (app) => {
-    app.get('/analytics', async (req) => {
+    app.get('/analytics', { preHandler: auth.guard }, async (req) => {
       const q = Query.parse(req.query);
       return services.analytics.report({
         funnelId: q.funnelId,

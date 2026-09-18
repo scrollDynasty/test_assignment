@@ -44,6 +44,8 @@ const FUNNEL = opt('funnel', 'workstyle-planner');
 const VERIFY = args.includes('--verify');
 // One worker by default: the behaviour model then consumes the seeded RNG in a fixed order (reproducible runs).
 const CONCURRENCY = Number(opt('concurrency', '1'));
+/** Analytics is internal (login or key); the generator reads it with the access key for --verify. */
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? 'dev-admin-token';
 const RUN_ID = `trafficgen-${SEED}-${Date.now().toString(36)}`;
 
 // ---------------------------------------------------------------- deterministic randomness
@@ -103,7 +105,10 @@ const P = {
 async function http<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     method,
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
+    headers: {
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...(path.startsWith('/api/analytics') ? { 'x-admin-token': ADMIN_TOKEN } : {}),
+    },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const text = await res.text();
