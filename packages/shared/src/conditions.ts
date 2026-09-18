@@ -30,7 +30,8 @@ function evaluate(condition: Condition, answers: Answers): Truth {
     const inner = evaluate(condition.not, answers);
     return inner === null ? null : !inner;
   }
-  return evaluateLeaf(condition, answers[condition.answer]);
+  // Own keys only: an answer named "constructor" or "toString" must not resolve to an inherited function.
+  return evaluateLeaf(condition, Object.hasOwn(answers, condition.answer) ? answers[condition.answer] : undefined);
 }
 
 function evaluateLeaf(leaf: LeafCondition, actual: AnswerValue | undefined): Truth {
@@ -84,9 +85,4 @@ export function referencedLeaves(condition: Condition): LeafCondition[] {
   if ('any' in condition) return condition.any.flatMap(referencedLeaves);
   if ('not' in condition) return referencedLeaves(condition.not);
   return [condition];
-}
-
-/** Every answer name referenced anywhere in a condition tree. */
-export function referencedAnswers(condition: Condition): string[] {
-  return referencedLeaves(condition).map((l) => l.answer);
 }

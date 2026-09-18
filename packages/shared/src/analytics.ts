@@ -46,6 +46,9 @@ export interface VariantReport extends SummaryMetrics {
   backRate: number | null;
   steps: StepRow[];
   beforeFirstStep: number;
+  /** Sessions of this version/variant in the sessions table under the same filters: counted without events. */
+  sessionsInTable: number;
+  /** Buckets add up to `started` AND `started` equals `sessionsInTable` (catches a lost or extra session_started). */
   invariantOk: boolean;
   resultMix: Record<string, number>;
 }

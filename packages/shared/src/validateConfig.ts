@@ -2,6 +2,7 @@ import { referencedLeaves } from './conditions.js';
 import {
   FunnelConfigSchema,
   isInteractive,
+  STEP_TYPES,
   type FunnelConfig,
   type InteractiveStep,
   type LeafCondition,
@@ -50,6 +51,9 @@ export function validateConfig(raw: unknown): ConfigValidation {
   });
   if (!Object.hasOwn(config.results, config.defaultResultId)) {
     errors.push({ path: 'defaultResultId', message: `unknown result "${config.defaultResultId}"` });
+  }
+  for (const type of config.progress?.excludeTypes ?? []) {
+    if (!(STEP_TYPES as readonly string[]).includes(type)) errors.push({ path: 'progress.excludeTypes', message: `unknown step type "${type}"` });
   }
   const eventNames = config.events.allowed.map((e) => e.name);
   if (new Set(eventNames).size !== eventNames.length) errors.push({ path: 'events.allowed', message: 'duplicate event names' });
@@ -100,6 +104,30 @@ function checkVariant(funnel: ResolvedFunnel, path: string, errors: ConfigIssue[
   }
   if (last?.type === 'result' && last.visibleWhen) {
     errors.push({ path: `steps.${last.id}.visibleWhen`, message: `variant ${v}: the result step must always be reachable` });
+  }
+
+  // Every step must be answerable as this variant shows it: a version that passes cannot dead-end a session.
+  for (const id of seq) {
+    const step = funnel.steps[id];
+    if (!step) continue;
+    const at = `steps.${id}`;
+    const fail = (sub: string, message: string) => errors.push({ path: `${at}${sub}`, message: `variant ${v}: ${message}` });
+    if (step.id !== id) fail('.id', `an override changes the id to "${step.id}"`);
+    if (step.type === 'single-select' || step.type === 'multi-select') {
+      const values = step.input.options.map((o) => o.value);
+      if (new Set(values).size !== values.length) fail('.input.options', 'duplicate option values');
+    }
+    if (step.type === 'multi-select') {
+      const count = step.input.options.length;
+      const min = step.validation?.minSelections ?? 0;
+      const max = step.validation?.maxSelections;
+      if (min > count) fail('.validation.minSelections', `requires ${min} selections but there are only ${count} options`);
+      if (max !== undefined && min > max) fail('.validation', `minSelections ${min} is greater than maxSelections ${max}`);
+    }
+    // min itself is always a valid value (steps count from min), so min <= max is enough for a number to exist.
+    if (step.type === 'number' && step.input.min !== undefined && step.input.max !== undefined && step.input.min > step.input.max) {
+      fail('.input', `min ${step.input.min} is greater than max ${step.input.max}: no answer is possible`);
+    }
   }
 
   // Input names are unique among the steps this variant shows; remember where each is asked.

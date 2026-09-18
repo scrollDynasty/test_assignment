@@ -11,7 +11,6 @@ export const CORE_EVENTS = [
   'result_viewed',
   'cta_clicked',
 ] as const;
-export type CoreEventName = (typeof CORE_EVENTS)[number];
 
 export const MAX_BATCH_SIZE = 100;
 

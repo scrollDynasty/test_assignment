@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { Services } from '../app.js';
 import type { Auth } from '../auth.js';
+import { DEFAULT_IN_PROGRESS_MINUTES } from '../modules/analytics.js';
 
 const Query = z.object({
   funnelId: z.string().min(1).max(128),
@@ -14,7 +15,7 @@ const Query = z.object({
     .optional()
     .transform((v) => (v === undefined || v === '' ? undefined : v)),
   include_overrides: z.enum(['true', 'false']).default('false'),
-  in_progress_minutes: z.coerce.number().int().min(0).max(1440).default(30),
+  in_progress_minutes: z.coerce.number().int().min(0).max(1440).default(DEFAULT_IN_PROGRESS_MINUTES),
 });
 
 /**

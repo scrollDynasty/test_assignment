@@ -30,6 +30,7 @@ import {
   type SessionDto,
   type Step,
 } from '../packages/shared/src/index.js';
+import { accessKey, intOption } from './lib.js';
 
 // ---------------------------------------------------------------- CLI
 const args = process.argv.slice(2);
@@ -37,15 +38,23 @@ const opt = (name: string, fallback: string) => {
   const i = args.indexOf(`--${name}`);
   return i >= 0 && args[i + 1] ? (args[i + 1] as string) : fallback;
 };
-const SESSIONS = Number(opt('sessions', '150'));
-const SEED = Number(opt('seed', '42'));
+const SESSIONS = intOption('sessions', opt('sessions', '150'), 1);
+const SEED = intOption('seed', opt('seed', '42'));
 const API = opt('url', process.env.API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const FUNNEL = opt('funnel', 'workstyle-planner');
 const VERIFY = args.includes('--verify');
 // One worker by default: the behaviour model then consumes the seeded RNG in a fixed order (reproducible runs).
-const CONCURRENCY = Number(opt('concurrency', '1'));
-/** Analytics is internal (login or key); the generator reads it with the access key for --verify. */
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(API) ? 'dev-admin-token' : '');
+const CONCURRENCY = intOption('concurrency', opt('concurrency', '1'), 1);
+/**
+ * The access key is optional: the generator only needs the public API. With the key it also reads the dashboard
+ * (required for --verify) and is exempt from the public per-IP rate limit, which a load run would otherwise hit.
+ */
+const ADMIN_TOKEN = accessKey(API);
+if (VERIFY && !ADMIN_TOKEN) {
+  console.error('--verify reads the internal dashboard: set ADMIN_TOKEN');
+  process.exit(1);
+}
+if (!ADMIN_TOKEN) console.warn('No ADMIN_TOKEN: traffic only (no dashboard comparison); public rate limits apply.');
 const RUN_ID = `trafficgen-${SEED}-${Date.now().toString(36)}`;
 
 // ---------------------------------------------------------------- deterministic randomness
@@ -107,7 +116,7 @@ async function http<T>(method: string, path: string, body?: unknown): Promise<T>
     method,
     headers: {
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      ...(path.startsWith('/api/analytics') ? { 'x-admin-token': ADMIN_TOKEN } : {}),
+      ...(ADMIN_TOKEN ? { 'x-admin-token': ADMIN_TOKEN } : {}),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
@@ -333,8 +342,8 @@ async function report(version: number): Promise<AnalyticsReport> {
 async function main() {
   console.log(`Generating ${SESSIONS} sessions against ${API} (seed ${SEED}, run ${RUN_ID})`);
   // Snapshot of the active version before the run: --verify compares deltas, so earlier traffic does not matter.
-  const probe = await http<AnalyticsReport>('GET', `/api/analytics?funnelId=${FUNNEL}&in_progress_minutes=0`);
-  const activeVersion = probe.filters.version;
+  const probe = ADMIN_TOKEN ? await http<AnalyticsReport>('GET', `/api/analytics?funnelId=${FUNNEL}&in_progress_minutes=0`) : null;
+  const activeVersion = probe?.filters.version ?? null;
   const before = VERIFY && activeVersion !== null ? await report(activeVersion) : null;
 
   let next = 0;
@@ -351,7 +360,7 @@ async function main() {
   console.table({ ...stats });
   console.log('Ingestion responses:', ingest);
 
-  const versions = [...new Set(truths.map((t) => t.version))];
+  const versions = ADMIN_TOKEN ? [...new Set(truths.map((t) => t.version))] : [];
   let ok = true;
   for (const version of versions) {
     const after = await report(version);

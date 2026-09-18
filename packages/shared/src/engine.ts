@@ -30,7 +30,7 @@ export function computeVisibility(funnel: ResolvedFunnel, answers: Answers): Vis
     if (step.visibleWhen && !evaluateCondition(step.visibleWhen, effectiveAnswers)) continue;
     visibleSteps.push(id);
     if (isInteractive(step)) {
-      const value = answers[step.input.name];
+      const value = Object.hasOwn(answers, step.input.name) ? answers[step.input.name] : undefined;
       if (value !== undefined) effectiveAnswers[step.input.name] = value;
     }
   }

@@ -44,7 +44,7 @@ describe('validateConfig', () => {
     ['override of a missing step', (c: LooseJson) => { c.experiment.variants.B.stepOverrides.ghost = { content: {} }; }, 'stepOverrides.ghost'],
     ['rule pointing to a missing result', (c: LooseJson) => { c.resultRules[0].resultId = 'ghost'; }, 'resultRules.0.resultId'],
     ['default result missing', (c: LooseJson) => { c.defaultResultId = 'ghost'; }, 'defaultResultId'],
-    // Found by code review: rules must hold for what a variant shows after overrides, not just the base steps.
+    // Rules must hold for what a variant shows after overrides, not just the base steps.
     ['override turning a question into a second result step', (c: LooseJson) => { c.experiment.variants.B.stepOverrides.team_size = { type: 'result' }; }, 'exactly one result step'],
     ['override reusing another input name', (c: LooseJson) => { c.experiment.variants.B.stepOverrides.team_size = { input: { name: 'work_mode' } }; }, 'is asked twice'],
     ['override adding a forward-looking branch', (c: LooseJson) => { c.experiment.variants.B.stepOverrides.team_size = { visibleWhen: { answer: 'tool_count', operator: 'gte', value: 3 } }; }, 'is not asked before "team_size"'],
@@ -54,6 +54,13 @@ describe('validateConfig', () => {
     ['numeric comparison with a string', (c: LooseJson) => { c.resultRules[1].when = { answer: 'team_size', operator: 'gte', value: '15' }; }, 'expects a number'],
     ['contains on a single-select answer', (c: LooseJson) => { c.resultRules[1].when = { answer: 'work_mode', operator: 'contains', value: 'hybrid' }; }, 'only valid for multi-select'],
     ['a conditional result step', (c: LooseJson) => { c.steps.result.visibleWhen = { answer: 'work_mode', operator: 'eq', value: 'office' }; }, 'must always be reachable'],
+    // Unanswerable questions: a published version must not be able to trap every new session on one step.
+    ['more required selections than options', (c: LooseJson) => { c.steps.priorities.validation.minSelections = 99; }, 'only 5 options'],
+    ['minSelections above maxSelections', (c: LooseJson) => { c.steps.priorities.validation.minSelections = 3; c.steps.priorities.validation.maxSelections = 2; }, 'greater than maxSelections'],
+    ['a number range with min above max', (c: LooseJson) => { c.steps.team_size.input.min = 10; c.steps.team_size.input.max = 5; }, 'no answer is possible'],
+    ['duplicate option values', (c: LooseJson) => { c.steps.work_mode.input.options.push({ value: 'remote', label: 'Remote again' }); }, 'duplicate option values'],
+    ['an override that renames a step', (c: LooseJson) => { c.experiment.variants.B.stepOverrides.team_size = { id: 'renamed' }; }, 'changes the id'],
+    ['a misspelt progress exclusion', (c: LooseJson) => { c.progress.excludeTypes = ['inf0']; }, 'unknown step type "inf0"'],
   ] as const)('rejects a config with %s', (_label, mutate, expected) => {
     const result = validateConfig(mutated(1, mutate));
     expect(result.ok).toBe(false);
@@ -64,6 +71,7 @@ describe('validateConfig', () => {
 describe('evaluateCondition', () => {
   const answers: Answers = { mode: 'hybrid', hours: 15, picks: ['focus', 'compliance'] };
   it.each<[Condition, boolean]>([
+    [{ answer: 'constructor', operator: 'exists' }, false], // inherited keys are not answers
     [{ answer: 'mode', operator: 'eq', value: 'hybrid' }, true],
     [{ answer: 'mode', operator: 'neq', value: 'hybrid' }, false],
     [{ answer: 'mode', operator: 'in', value: ['hybrid', 'office'] }, true],
