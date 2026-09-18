@@ -3,6 +3,7 @@ import type { Result, Step } from '@funnel/shared';
 import { api } from '../lib/api';
 import type { Tracker } from '../lib/tracker';
 import { useI18n } from '../i18n';
+import { dissolve } from '../lib/transition';
 
 interface Props {
   step: Extract<Step, { type: 'result' }>;
@@ -30,8 +31,14 @@ export function ResultStep({ step, sessionId, tracker, whenSaved, onRestart }: P
     setPhase({ kind: 'loading' });
     whenSaved()
       .then(() => api.result(sessionId))
-      .then((r) => !cancelled && setPhase({ kind: 'ready', resultId: r.resultId, result: r.result }))
-      .catch(() => !cancelled && setPhase({ kind: 'error' }));
+      // "Calculating…" dissolves into the result (or the error), like any other change of screen.
+      // A cancelled request (unmount, retry) must not start a transition: it would dissolve the screen into itself.
+      .then((r) => {
+        if (!cancelled) dissolve(() => !cancelled && setPhase({ kind: 'ready', resultId: r.resultId, result: r.result }));
+      })
+      .catch(() => {
+        if (!cancelled) dissolve(() => !cancelled && setPhase({ kind: 'error' }));
+      });
     return () => {
       cancelled = true;
     };
@@ -88,7 +95,8 @@ export function ResultStep({ step, sessionId, tracker, whenSaved, onRestart }: P
   const onCta = () => {
     if (!cta) return;
     tracker?.track('cta_clicked', step.id, { result_id: resultId, action: cta.action });
-    if (cta.action === 'expand_recommendation') setExpanded(true);
+    // Only the lower part changes: the button dissolves and the plan condenses in below the unchanged title.
+    if (cta.action === 'expand_recommendation') dissolve(() => setExpanded(true), 'reveal');
   };
 
   return (

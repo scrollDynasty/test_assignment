@@ -145,8 +145,12 @@ export function useFunnel(funnelId: string): FunnelView {
         sessionRef.current = session;
         trackerRef.current = createTracker(session);
         syncBrowserHistory(session);
-        setLoad({ kind: 'ready', session });
-        setNavId((n) => n + 1);
+        const ready = session;
+        dissolve(() => {
+          if (cancelled) return;
+          setLoad({ kind: 'ready', session: ready });
+          setNavId((n) => n + 1);
+        });
         if (unsaved) {
           pendingRef.current = unsaved;
           void flush();
@@ -370,11 +374,22 @@ export function useFunnel(funnelId: string): FunnelView {
     const url = new URL(window.location.href);
     url.searchParams.delete('step');
     window.history.replaceState(null, '', `${url.pathname}${url.search}`);
-    setError(null);
-    setReloadToken((t) => t + 1);
+    // The finished screen evaporates here; the new session's first screen condenses in when it has loaded.
+    dissolve(() => {
+      setError(null);
+      setLoad({ kind: 'loading' });
+      setReloadToken((t) => t + 1);
+    });
   }, [sessionKey]);
 
-  const retryLoad = useCallback(() => setReloadToken((t) => t + 1), []);
+  const retryLoad = useCallback(
+    () =>
+      dissolve(() => {
+        setLoad({ kind: 'loading' });
+        setReloadToken((t) => t + 1);
+      }),
+    [],
+  );
   /** Resolves when nothing is pending; if an earlier save gave up, this retries it. */
   const whenSaved = useCallback(() => (pendingRef.current ? flush() : (flushing.current ?? Promise.resolve())), [flush]);
 
