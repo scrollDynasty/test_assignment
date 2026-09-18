@@ -42,3 +42,16 @@ export function schemaHash(db: Db): string {
     .all();
   return createHash('sha256').update(JSON.stringify(rows)).digest('hex');
 }
+
+/**
+ * Privacy: raw answers are kept only while a session can still be resumed (session.ttlHours).
+ * After expiry they are wiped from state; analytics never needed them (events carry no answer values).
+ */
+export function purgeExpiredAnswers(db: Db, now = Date.now()): number {
+  return db
+    .prepare(
+      `UPDATE sessions SET state_json = json_set(state_json, '$.answers', json('{}'))
+       WHERE expires_at <= ? AND json_extract(state_json, '$.answers') <> '{}'`,
+    )
+    .run(now).changes;
+}

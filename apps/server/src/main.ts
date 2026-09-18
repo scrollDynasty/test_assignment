@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
-import { openDb } from './db.js';
+import { openDb, purgeExpiredAnswers } from './db.js';
 import { VersionsService } from './modules/versions.js';
 import { seedIfEmpty } from './seed.js';
 
@@ -25,4 +25,11 @@ const seed = seedIfEmpty(db, new VersionsService(db), seedPath);
 
 const app = await buildApp({ db, adminToken, logger: true, ...(existsSync(webDir) ? { webDir } : {}) });
 if (seed.seeded) app.log.info(seed, 'seeded initial funnel version');
+const purge = () => {
+  const n = purgeExpiredAnswers(db);
+  if (n > 0) app.log.info({ sessions: n }, 'wiped answers of expired sessions');
+};
+purge();
+setInterval(purge, 3600_000).unref();
+
 await app.listen({ port, host: '0.0.0.0' });

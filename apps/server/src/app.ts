@@ -1,3 +1,4 @@
+import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import type { Db } from './db.js';
@@ -59,6 +60,15 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   await app.register(eventRoutes(services), { prefix: '/api' });
   await app.register(analyticsRoutes(services), { prefix: '/api' });
   await app.register(adminRoutes(services, opts.db, opts.adminToken), { prefix: '/api/admin' });
+
+  if (opts.webDir) {
+    // Single deployable: the server also serves the built SPA; unknown non-API GETs fall back to index.html.
+    await app.register(fastifyStatic, { root: opts.webDir, wildcard: false });
+    app.setNotFoundHandler((req, reply) => {
+      if (req.method === 'GET' && !req.url.startsWith('/api/')) return reply.sendFile('index.html');
+      return reply.status(404).send({ error: 'not_found', message: 'Route not found' });
+    });
+  }
 
   return app;
 }
