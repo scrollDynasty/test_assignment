@@ -16,6 +16,7 @@ const CreateBody = z.object({
     .object({ utm_source: utmValue, utm_medium: utmValue, utm_campaign: utmValue, utm_content: utmValue, utm_term: utmValue })
     .optional(),
   variantOverride: z.string().max(32).optional(),
+  query: z.record(z.string().max(64), z.string().max(256)).optional(),
 });
 
 const IdParams = z.object({ id: z.uuid() });
@@ -40,6 +41,7 @@ export const sessionRoutes =
         funnelId: body.funnelId,
         utm: body.utm ?? {},
         variantOverride: body.variantOverride,
+        query: body.query ?? {},
       });
       return reply.status(201).send(session);
     });

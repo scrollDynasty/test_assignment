@@ -32,7 +32,10 @@ export interface SessionDto {
 export interface CreateSessionRequest {
   funnelId: string;
   utm?: Utm;
+  /** Explicit variant override (tools, tests). */
   variantOverride?: string;
+  /** Page query parameters; the server reads the override from `experiment.overrideQueryParam` of the active version. */
+  query?: Record<string, string>;
 }
 
 export interface SaveStateRequest {

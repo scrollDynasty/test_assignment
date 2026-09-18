@@ -3,8 +3,10 @@ import { ZodError } from 'zod';
 import type { Db } from './db.js';
 import { HttpError } from './errors.js';
 import { adminRoutes } from './routes/admin.js';
+import { EventsService } from './modules/events.js';
 import { SessionsService } from './modules/sessions.js';
 import { VersionsService } from './modules/versions.js';
+import { eventRoutes } from './routes/events.js';
 import { sessionRoutes } from './routes/sessions.js';
 
 export interface AppOptions {
@@ -20,12 +22,14 @@ export interface AppOptions {
 export interface Services {
   versions: VersionsService;
   sessions: SessionsService;
+  events: EventsService;
 }
 
 export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024 });
   const versions = new VersionsService(opts.db);
-  const services: Services = { versions, sessions: new SessionsService(opts.db, versions, opts.now) };
+  const sessions = new SessionsService(opts.db, versions, opts.now);
+  const services: Services = { versions, sessions, events: new EventsService(opts.db, sessions, opts.now) };
 
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof HttpError) {
@@ -44,6 +48,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
 
   app.get('/api/health', async () => ({ ok: true }));
   await app.register(sessionRoutes(services), { prefix: '/api' });
+  await app.register(eventRoutes(services), { prefix: '/api' });
   await app.register(adminRoutes(services, opts.db, opts.adminToken), { prefix: '/api/admin' });
 
   return app;

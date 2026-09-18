@@ -170,6 +170,10 @@ describe('TZ 7.1 test 2 — A/B variant is assigned on the server and is stable'
     expect(forced.sessionId).not.toBe(natural.sessionId);
     expect((await getSession(app, natural.sessionId)).variant).toBe(natural.variant);
 
+    // The page passes its query string; the parameter name comes from experiment.overrideQueryParam ("variant").
+    const viaQuery = await createSession(app, { query: { variant: other, utm_source: 'x' } });
+    expect(viaQuery).toMatchObject({ variant: other, assignment: 'override' });
+
     const invalid = await createSession(app, { variantOverride: 'C' });
     expect(['A', 'B']).toContain(invalid.variant);
     expect(invalid.assignment).toBe('hash');
