@@ -40,6 +40,9 @@ describe('single deployable: the API also serves the built web app', () => {
     const page = await app.inject({ method: 'GET', url: '/f/workstyle-planner?step=intro' });
     expect(page.statusCode).toBe(200);
     expect(page.body).toContain('id="root"');
+    expect((await app.inject({ method: 'HEAD', url: '/internal/analytics' })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/assets/missing.js.map' })).statusCode).toBe(404);
+    expect(page.headers['content-security-policy']).toContain("frame-ancestors 'none'");
     const api = await app.inject({ method: 'GET', url: '/api/nope' });
     expect(api.statusCode).toBe(404);
     expect(api.json().error).toBe('not_found');

@@ -8,5 +8,5 @@ export default defineConfig({
     alias: { '@funnel/shared': fileURLToPath(new URL('../../packages/shared/src/index.ts', import.meta.url)) },
   },
   server: { port: 5173, proxy: { '/api': 'http://localhost:3000' } },
-  build: { outDir: 'dist', sourcemap: true },
+  build: { outDir: 'dist', sourcemap: false },
 });

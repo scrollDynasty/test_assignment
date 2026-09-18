@@ -26,5 +26,8 @@ COPY --from=build /app/apps/server/dist apps/server/dist
 COPY --from=build /app/apps/web/dist apps/web/dist
 # The initial version seeded on an empty database; later versions are published at runtime via the admin API.
 COPY funnel-v1.json funnel-v2.json funnel-v3.json ./
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data && chown node:node /data
 EXPOSE 8080
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "apps/server/dist/main.js"]

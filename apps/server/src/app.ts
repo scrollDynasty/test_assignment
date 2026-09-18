@@ -1,4 +1,5 @@
 import fastifyCookie from '@fastify/cookie';
+import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -57,6 +58,25 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     analytics: new AnalyticsService(opts.db, versions, opts.now),
   };
 
+  // Security headers. CSP allows only our own scripts/styles/API (React sets inline style attributes → 'unsafe-inline'
+  // for styles only); frame-ancestors 'none' stops clickjacking of the internal Publish/Rollback buttons.
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        frameAncestors: ["'none'"],
+        formAction: ["'self'"],
+        baseUri: ["'self'"],
+        objectSrc: ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  });
+
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof HttpError) {
       return reply.status(err.statusCode).send({ error: err.code, message: err.message, details: err.details });
@@ -96,9 +116,19 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
 
   if (opts.webDir) {
     // Single deployable: the server also serves the built SPA; unknown non-API GETs fall back to index.html.
-    await app.register(fastifyStatic, { root: opts.webDir, wildcard: false });
+    await app.register(fastifyStatic, {
+      root: opts.webDir,
+      wildcard: false,
+      // Vite puts content hashes in asset names: cache them for a year; index.html itself is never cached.
+      setHeaders: (res, path) => {
+        res.header('cache-control', /[\\/]assets[\\/]/.test(path) ? 'public, max-age=31536000, immutable' : 'no-cache');
+      },
+    });
     app.setNotFoundHandler((req, reply) => {
-      if (req.method === 'GET' && !req.url.startsWith('/api/')) return reply.sendFile('index.html');
+      // App routes fall back to index.html; a missing /assets/* file is a real 404 (not HTML with status 200).
+      if ((req.method === 'GET' || req.method === 'HEAD') && !req.url.startsWith('/api/') && !req.url.startsWith('/assets/')) {
+        return reply.header('cache-control', 'no-cache').sendFile('index.html');
+      }
       return reply.status(404).send({ error: 'not_found', message: 'Route not found' });
     });
   }
