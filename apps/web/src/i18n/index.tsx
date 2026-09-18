@@ -20,6 +20,8 @@ interface I18n {
   setLang: (lang: Lang) => void;
   /** Interface string with {placeholders}. */
   t: (key: UiKey, vars?: Record<string, string | number>) => string;
+  /** Plural form ("one" | "few" | "many" | "other") for a number in the current language (Intl.PluralRules). */
+  plural: (n: number) => 'one' | 'few' | 'many' | 'other';
   /** Funnel content from a config: translated when a translation exists, otherwise shown as is. */
   tc: (text: string | undefined) => string;
 }
@@ -39,9 +41,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<I18n>(() => {
     const dict = lang === 'ru' ? ru : en;
+    const rules = new Intl.PluralRules(lang);
     return {
       lang,
       setLang,
+      plural: (n) => {
+        const form = rules.select(n);
+        return form === 'one' || form === 'few' || form === 'many' ? form : 'other';
+      },
       t: (key, vars) => dict[key].replace(/\{(\w+)\}/g, (_, name: string) => String(vars?.[name] ?? `{${name}}`)),
       tc: (text) => {
         if (text === undefined) return '';

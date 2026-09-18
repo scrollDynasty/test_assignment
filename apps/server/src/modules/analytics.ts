@@ -284,7 +284,7 @@ export class AnalyticsService {
       version: config.version,
       experimentId: config.experiment.id,
       variants,
-      abTest: abTest(config, facts),
+      abTest: abTest(config, facts, clock),
       otherEvents: [...other.values()],
     };
   }
@@ -420,7 +420,12 @@ function sortKeys(obj: Record<string, number>): Record<string, number> {
  * SRM is always computed on hash-assigned sessions only: overrides are not randomized, so including
  * them would flag a mismatch that is not a bug in assignment.
  */
-function abTest(config: FunnelConfig, facts: SessionFacts[]): AbTest | null {
+/**
+ * Sessions still in progress have not had the chance to convert yet; counting them as non-converters would bias
+ * early snapshots (a shorter variant finishes sooner and "wins" mechanically). The A/B test uses finished sessions only.
+ */
+function abTest(config: FunnelConfig, allFacts: SessionFacts[], clock: Clock): AbTest | null {
+  const facts = allFacts.filter((f) => !isInProgress(f, clock));
   const keys = Object.keys(config.experiment.variants).sort();
   const [aKey, bKey] = keys.includes('A') && keys.includes('B') ? ['A', 'B'] : keys.length === 2 ? [keys[0], keys[1]] : [undefined, undefined];
   if (aKey === undefined || bKey === undefined) return null;
@@ -440,8 +445,8 @@ function abTest(config: FunnelConfig, facts: SessionFacts[]): AbTest | null {
 
   const wA = config.experiment.variants[aKey]?.weight ?? 0;
   const wB = config.experiment.variants[bKey]?.weight ?? 0;
-  const hashA = facts.filter((f) => f.variant === aKey && f.assignment === 'hash').length;
-  const hashB = facts.filter((f) => f.variant === bKey && f.assignment === 'hash').length;
+  const hashA = allFacts.filter((f) => f.variant === aKey && f.assignment === 'hash').length;
+  const hashB = allFacts.filter((f) => f.variant === bKey && f.assignment === 'hash').length;
   const srmTest = srmChiSquare([hashA, hashB], [wA, wB]);
 
   return {

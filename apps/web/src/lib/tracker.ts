@@ -25,11 +25,20 @@ const MAX_BATCH_BYTES = 48 * 1024;
 
 type Queued = IncomingEvent;
 
+/**
+ * In-memory copy of the outbox. localStorage is the durable mirror (survives refresh / tab close); when it is
+ * unavailable (private mode, disabled storage, quota) the memory copy keeps analytics working for this page.
+ */
+let memory: Queued[] | null = null;
+
 function readOutbox(): Queued[] {
-  return storage.getJson<Queued[]>(OUTBOX_KEY) ?? [];
+  const stored = storage.getJson<Queued[]>(OUTBOX_KEY);
+  if (stored) return stored;
+  return memory ?? [];
 }
 
 function writeOutbox(events: Queued[]): void {
+  memory = events;
   storage.setJson(OUTBOX_KEY, events);
 }
 
@@ -95,6 +104,11 @@ class Outbox {
       if (res.status === 413 && this.maxCount > 1) {
         this.maxCount = Math.max(1, Math.floor(this.maxCount / 2));
         return this.retrySoon(0);
+      }
+      if (res.status === 429 || res.status === 408) {
+        // Throttled or timed out: the events are fine, send them later (Retry-After in seconds when given).
+        const retryAfter = Number(res.headers.get('retry-after'));
+        return this.retrySoon(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : undefined);
       }
       if (res.ok) {
         const body = (await res.json()) as EventBatchResponse;

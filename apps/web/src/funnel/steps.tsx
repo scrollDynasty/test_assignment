@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { AnswerValue, InteractiveStep, Step } from '@funnel/shared';
 import { useI18n } from '../i18n';
 
@@ -13,14 +13,18 @@ interface StepProps<S extends Step> {
   initial: AnswerValue | undefined;
   onSubmit: (value: AnswerValue | undefined) => void;
   onChange: () => void;
+  /** The last submit failed validation: the message is rendered by the page as #step-error. */
+  invalid: boolean;
 }
+
+const invalidProps = (invalid: boolean) => (invalid ? { 'aria-invalid': true, 'aria-describedby': 'step-error' } : {});
 
 export function InfoStep({ step, onSubmit }: StepProps<Extract<Step, { type: 'info' }>>) {
   const { t, tc } = useI18n();
   return (
     <div className="step">
       {step.content.eyebrow && <p className="eyebrow">{tc(step.content.eyebrow)}</p>}
-      <h1>{tc(step.content.title)}</h1>
+      <h1 tabIndex={-1}>{tc(step.content.title)}</h1>
       {step.content.body && <p className="body">{tc(step.content.body)}</p>}
       <div className="actions">
         <button className="primary" autoFocus onClick={() => onSubmit(undefined)}>
@@ -35,19 +39,19 @@ function Header({ step }: { step: InteractiveStep }) {
   const { tc } = useI18n();
   return (
     <>
-      <h1 id={`${step.id}-title`}>{tc(step.content.title)}</h1>
+      <h1 id={`${step.id}-title`} tabIndex={-1}>{tc(step.content.title)}</h1>
       {step.content.helperText && <p className="helper">{tc(step.content.helperText)}</p>}
     </>
   );
 }
 
-export function SingleSelectStep({ step, initial, onSubmit, onChange }: StepProps<Extract<Step, { type: 'single-select' }>>) {
+export function SingleSelectStep({ step, initial, onSubmit, onChange, invalid }: StepProps<Extract<Step, { type: 'single-select' }>>) {
   const { t, tc } = useI18n();
   const [value, setValue] = useState<string | undefined>(typeof initial === 'string' ? initial : undefined);
   return (
     <form className="step" noValidate onSubmit={(e) => (e.preventDefault(), onSubmit(value))}>
       <Header step={step} />
-      <div className="options" role="radiogroup" aria-labelledby={`${step.id}-title`}>
+      <div className="options" role="radiogroup" aria-labelledby={`${step.id}-title`} {...invalidProps(invalid)}>
         {step.input.options.map((o) => (
           <label key={o.value} className={`option ${value === o.value ? 'selected' : ''}`}>
             <input
@@ -68,7 +72,7 @@ export function SingleSelectStep({ step, initial, onSubmit, onChange }: StepProp
   );
 }
 
-export function MultiSelectStep({ step, initial, onSubmit, onChange }: StepProps<Extract<Step, { type: 'multi-select' }>>) {
+export function MultiSelectStep({ step, initial, onSubmit, onChange, invalid }: StepProps<Extract<Step, { type: 'multi-select' }>>) {
   const { t, tc } = useI18n();
   const [values, setValues] = useState<string[]>(Array.isArray(initial) ? initial : []);
   const max = step.validation?.maxSelections;
@@ -79,7 +83,7 @@ export function MultiSelectStep({ step, initial, onSubmit, onChange }: StepProps
   return (
     <form className="step" noValidate onSubmit={(e) => (e.preventDefault(), onSubmit(values))}>
       <Header step={step} />
-      <div className="options" role="group" aria-labelledby={`${step.id}-title`}>
+      <div className="options" role="group" aria-labelledby={`${step.id}-title`} {...invalidProps(invalid)}>
         {step.input.options.map((o) => {
           const checked = values.includes(o.value);
           return (
@@ -98,16 +102,16 @@ export function MultiSelectStep({ step, initial, onSubmit, onChange }: StepProps
   );
 }
 
-export function NumberStep({ step, initial, onSubmit, onChange }: StepProps<Extract<Step, { type: 'number' }>>) {
+export function NumberStep({ step, initial, onSubmit, onChange, invalid }: StepProps<Extract<Step, { type: 'number' }>>) {
   const { t, tc } = useI18n();
   const [text, setText] = useState(typeof initial === 'number' ? String(initial) : '');
-  useEffect(() => setText(typeof initial === 'number' ? String(initial) : ''), [step.id, initial]);
   return (
     <form className="step" noValidate onSubmit={(e) => (e.preventDefault(), onSubmit(text))}>
       <Header step={step} />
       <div className="number">
         <input
           aria-labelledby={`${step.id}-title`}
+          {...invalidProps(invalid)}
           type="number"
           inputMode="numeric"
           autoFocus

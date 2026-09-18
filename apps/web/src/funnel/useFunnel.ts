@@ -88,6 +88,8 @@ export function useFunnel(funnelId: string): FunnelView {
   const flushing = useRef<Promise<void> | null>(null);
   /** Set when we move the browser history ourselves, so the resulting popstate is ignored. */
   const ignorePop = useRef(false);
+  /** Set when a navigation has been started and not rendered yet: a double click must not skip a screen. */
+  const navigating = useRef(false);
 
   // ---------- bootstrap: resume or create ----------
   useEffect(() => {
@@ -204,8 +206,27 @@ export function useFunnel(funnelId: string): FunnelView {
           if (!pendingRef.current) storage.remove(pendingKey(current.sessionId));
           failures = 0;
         } catch (e) {
+          if (e instanceof ApiError && (e.status === 404 || e.status === 410)) {
+            // The session is gone (expired): retrying can never help; the page offers to start again.
+            pendingRef.current = null;
+            storage.remove(pendingKey(current.sessionId));
+            setError('session_gone');
+            break;
+          }
           if (e instanceof ApiError && (e.status === 409 || e.status === 422)) {
-            const fresh = await api.getSession(current.sessionId);
+            let fresh: SessionDto;
+            try {
+              fresh = await api.getSession(current.sessionId);
+            } catch {
+              // Could not even read the server copy: keep our state pending and retry later like a network error.
+              pendingRef.current ??= state;
+              if (++failures >= 5) {
+                setError('save_failed');
+                break;
+              }
+              await new Promise((r) => setTimeout(r, 500 * 2 ** failures));
+              continue;
+            }
             if (e.status === 409 && sameState(fresh.state, state)) {
               // Our earlier write did land (the response was lost, e.g. a timeout): just take the new rev.
               if (sessionRef.current) sessionRef.current = { ...sessionRef.current, rev: fresh.rev };
@@ -266,7 +287,8 @@ export function useFunnel(funnelId: string): FunnelView {
         else answers[step.input.name] = check.value;
       }
       const next = nextStepId(funnel, answers, state.currentStepId);
-      if (!next) return;
+      if (!next || navigating.current) return;
+      navigating.current = true;
       setError(null);
 
       if (isInteractive(step)) {
@@ -329,7 +351,17 @@ export function useFunnel(funnelId: string): FunnelView {
     return () => window.removeEventListener('popstate', onPopState);
   }, [commit]);
 
+  // A navigation is "done" once it has rendered (navId changed).
+  useEffect(() => {
+    navigating.current = false;
+  }, [navId]);
+
   const restart = useCallback(() => {
+    const old = sessionRef.current?.sessionId;
+    if (old) {
+      storage.remove(pendingKey(old));
+      storage.remove(`funnel:seq:${old}`);
+    }
     storage.remove(sessionKey);
     const url = new URL(window.location.href);
     url.searchParams.delete('step');

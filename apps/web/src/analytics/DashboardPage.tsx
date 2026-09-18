@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { AbTest, AnalyticsReport, VariantReport } from '@funnel/shared';
 import { useI18n } from '../i18n';
-import { api } from '../lib/api';
+import { ApiError, api } from '../lib/api';
 import { Nav } from '../Nav';
 
 const FUNNEL = 'workstyle-planner';
@@ -11,11 +11,13 @@ const pct = (v: number | null | undefined, digits = 1) => (v === null || v === u
 const ci = (c: [number, number] | null | undefined) => (c ? `${pct(c[0])} … ${pct(c[1])}` : '—');
 
 /**
- * Internal analytics dashboard. Everything is counted in unique sessions (see README "Aggregation rules").
- * Public and read-only: it shows aggregates only; version management lives on /admin behind a token.
+ * Internal analytics dashboard (behind the internal login). Everything is counted in unique sessions
+ * (see README "Правила агрегации"). Filters live in the URL, so a view can be shared as a link.
  */
 export function DashboardPage() {
-  const { t, lang } = useI18n();
+  const { t, lang, plural } = useI18n();
+  /** Only the latest request may update the page: fast filter changes must not show an older response. */
+  const requestSeq = useRef(0);
   const [params, setParams] = useSearchParams();
   const [report, setReport] = useState<AnalyticsReport | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +29,7 @@ export function DashboardPage() {
   const inProgressWindow = params.get('in_progress_minutes') ?? '30';
 
   const load = useCallback(async () => {
+    const seq = ++requestSeq.current;
     setLoading(true);
     const q = new URLSearchParams({ funnelId: FUNNEL });
     if (version) q.set('version', version);
@@ -34,14 +37,19 @@ export function DashboardPage() {
     if (includeOverrides) q.set('include_overrides', 'true');
     q.set('in_progress_minutes', inProgressWindow);
     try {
-      setReport(await api.request<AnalyticsReport>('GET', `/api/analytics?${q.toString()}`));
+      const next = await api.request<AnalyticsReport>('GET', `/api/analytics?${q.toString()}`);
+      if (seq !== requestSeq.current) return;
+      setReport(next);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      if (seq !== requestSeq.current) return;
+      // The 8-hour login expired: reload so the gate shows the login form instead of a raw error.
+      if (e instanceof ApiError && e.status === 401) return window.location.reload();
+      setError(t('dash.loadError'));
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
-  }, [version, campaign, includeOverrides, inProgressWindow]);
+  }, [version, campaign, includeOverrides, inProgressWindow, t]);
 
   useEffect(() => {
     void load();
@@ -105,7 +113,7 @@ export function DashboardPage() {
 
       {report && selected && report.filters.inProgressMinutes > 0 && inProgressTotal > 0 && (
         <p className="notice">
-          {t('dash.notice', { n: inProgressTotal, minutes: report.filters.inProgressMinutes })}{' '}
+          {t('dash.notice', { n: inProgressTotal, minutes: report.filters.inProgressMinutes, sessions: t(`dash.session.${plural(inProgressTotal)}`) })}{' '}
           <button className="link" onClick={() => setFilter('in_progress_minutes', '0')}>
             {t('dash.noticeAction')}
           </button>{' '}
@@ -158,6 +166,7 @@ export function DashboardPage() {
           <section>
             <h2>{t('dash.versions')}</h2>
             <p className="muted">{t('dash.versionsHelp')}</p>
+            <div className="table-wrap">
             <table>
               <thead>
                 <tr>
@@ -174,6 +183,7 @@ export function DashboardPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </section>
 
           {selected && selected.otherEvents.length > 0 && (
@@ -256,6 +266,7 @@ function StepTable({ name, v }: { name: string; v: VariantReport }) {
   return (
     <div className="card">
       <h3>{t('dash.variant', { name })}</h3>
+      <div className="table-wrap">
       <table className="steps">
         <thead>
           <tr><th>{t('dash.step')}</th><th>{t('dash.viewed')}</th><th>{t('dash.passed')}</th><th>{t('dash.conv')}</th><th>{t('dash.reach')}</th><th>{t('dash.dropoff')}</th></tr>
@@ -278,6 +289,7 @@ function StepTable({ name, v }: { name: string; v: VariantReport }) {
           ))}
         </tbody>
       </table>
+      </div>
       {v.beforeFirstStep > 0 && <p className="muted small">{t('dash.beforeFirst', { n: v.beforeFirstStep })}</p>}
     </div>
   );
@@ -292,7 +304,7 @@ function AbCard({ ab }: { ab: AbTest }) {
         <div className="kpis">
           <Kpi label={`${t('dash.variant', { name: ab.a.variant })} (${ab.a.conversions}/${ab.a.sessions})`} value={pct(ab.a.rate)} hint={ci(ab.a.ci)} />
           <Kpi label={`${t('dash.variant', { name: ab.b.variant })} (${ab.b.conversions}/${ab.b.sessions})`} value={pct(ab.b.rate)} hint={ci(ab.b.ci)} />
-          <Kpi label={t('dash.abDiff', { a: ab.a.variant, b: ab.b.variant })} value={`${ab.diff >= 0 ? '+' : ''}${(ab.diff * 100).toFixed(1)} pp`} />
+          <Kpi label={t('dash.abDiff', { a: ab.a.variant, b: ab.b.variant })} value={`${ab.diff >= 0 ? '+' : ''}${(ab.diff * 100).toFixed(1)} ${t('dash.pp')}`} />
           <Kpi label={t('dash.pValue')} value={ab.pValue.toFixed(3)} />
         </div>
         <ul className="notes">
@@ -300,7 +312,7 @@ function AbCard({ ab }: { ab: AbTest }) {
           {Math.min(ab.a.sessions, ab.b.sessions) < 30 && <li className="error">{t('dash.smallSample')}</li>}
           <li>
             <b>{ab.significant ? t('dash.significant') : t('dash.notSignificant')}</b>{' '}
-            {t('dash.mde', { mde: ab.mde === null ? '—' : `${(ab.mde * 100).toFixed(0)} pp` })}
+            {t('dash.mde', { mde: ab.mde === null ? '—' : `${(ab.mde * 100).toFixed(0)} ${t('dash.pp')}` })}
           </li>
           {ab.srm && (
             <li className={ab.srm.ok ? '' : 'error'}>

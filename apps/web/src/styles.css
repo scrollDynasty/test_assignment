@@ -112,3 +112,5 @@ details pre { max-height: 420px; overflow: auto; background: var(--bg); padding:
 .login h1 { margin: 0; font-size: 22px; }
 .login .token input { width: 100%; }
 .nav .logout { color: var(--muted); margin-left: 8px; }
+.table-wrap { width: 100%; overflow-x: auto; }
+.step h1:focus { outline: none; }

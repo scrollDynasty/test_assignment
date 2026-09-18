@@ -55,8 +55,10 @@ export function AdminPage() {
         setActiveConfig(JSON.stringify(cfg, null, 2));
       }
     } catch (e) {
+      // The internal login expired: reload so the gate shows the login form.
+      if (e instanceof ApiError && e.status === 401) return window.location.reload();
       setData(null);
-      setMessage({ kind: 'error', text: e instanceof ApiError && e.status === 401 ? t('admin.wrongToken') : String(e) });
+      setMessage({ kind: 'error', text: e instanceof Error ? e.message : String(e) });
     }
   }, [t]);
 
@@ -68,9 +70,9 @@ export function AdminPage() {
     setBusy(true);
     setMessage(null);
     try {
-      const res = await action();
-      await refresh();
-      setMessage({ kind: 'ok', text: `${ok}: ${JSON.stringify(res)}` });
+      await action();
+      setMessage({ kind: 'ok', text: ok });
+      await refresh(); // a refresh failure replaces the success message with its own error
     } catch (e) {
       const details = e instanceof ApiError && e.details ? ` ${JSON.stringify(e.details)}` : '';
       setMessage({ kind: 'error', text: `${e instanceof Error ? e.message : String(e)}${details}` });
@@ -195,7 +197,7 @@ export function AdminPage() {
               <tbody>
                 {[...data.releases].reverse().map((r) => (
                   <tr key={r.id}>
-                    <td>{r.id}</td><td>{r.action}</td><td>{r.fromVersion === null ? '—' : `v${r.fromVersion}`}</td>
+                    <td>{r.id}</td><td>{t(`admin.action.${r.action}`)}</td><td>{r.fromVersion === null ? '—' : `v${r.fromVersion}`}</td>
                     <td>v{r.toVersion}</td><td>{r.actor}</td><td>{when(r.createdAt)}</td>
                   </tr>
                 ))}

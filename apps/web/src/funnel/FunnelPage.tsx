@@ -35,8 +35,13 @@ export function FunnelPage() {
   }, [session, step, tracker, navId, progress]);
 
   useEffect(() => {
-    if (session) document.title = session.funnel.title;
-  }, [session]);
+    if (session) document.title = tc(session.funnel.title);
+  }, [session, tc]);
+
+  // Move focus to the new question on every navigation, so keyboard and screen-reader users land on it.
+  useEffect(() => {
+    if (navId > 1) document.querySelector<HTMLElement>('.step h1')?.focus();
+  }, [navId]);
 
   if (load.kind === 'loading') return <Shell><div className="spinner" /></Shell>;
   if (load.kind === 'error') {
@@ -55,7 +60,7 @@ export function FunnelPage() {
   if (!session || !step || !currentStepId) return null;
 
   const answer = isInteractive(step) ? session.state.answers[step.input.name] : undefined;
-  const common = { initial: answer, onSubmit: view.submit, onChange: view.clearError };
+  const common = { initial: answer, onSubmit: view.submit, onChange: view.clearError, invalid: Boolean(error) && error !== 'session_gone' };
   const showProgress = progress !== null && progress.count > 0 && step.type !== 'info' && step.type !== 'result';
 
   return (
@@ -72,7 +77,14 @@ export function FunnelPage() {
         </span>
       </div>
       {showProgress && (
-        <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={progress.count} aria-valuenow={progress.index}>
+        <div
+          className="progress"
+          role="progressbar"
+          aria-label={t('funnel.progressLabel')}
+          aria-valuemin={0}
+          aria-valuemax={progress.count}
+          aria-valuenow={progress.index}
+        >
           <div style={{ width: `${(progress.index / progress.count) * 100}%` }} />
         </div>
       )}
@@ -87,10 +99,17 @@ export function FunnelPage() {
           <ResultStep step={step} sessionId={session.sessionId} tracker={tracker} whenSaved={view.whenSaved} onRestart={view.restart} />
         )}
       </div>
-      {error && (
-        <p className="error" role="alert">
-          {error === 'save_failed' ? t('funnel.saveError') : tc(error)}
-        </p>
+      {error === 'session_gone' ? (
+        <div className="error" role="alert">
+          <p>{t('funnel.sessionGone')}</p>
+          <button className="primary" onClick={view.restart}>{t('funnel.startAgain')}</button>
+        </div>
+      ) : (
+        error && (
+          <p className="error" role="alert" id="step-error">
+            {error === 'save_failed' ? t('funnel.saveError') : tc(error)}
+          </p>
+        )
       )}
       {debug && <footer className="meta">{t('funnel.meta', { version: session.version, variant: session.variant })}</footer>}
     </Shell>

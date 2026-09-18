@@ -21,7 +21,8 @@
     "traffic": "tsx scripts/traffic.ts",
     "publish-config": "tsx scripts/publish.ts",
     "db:schema-hash": "tsx scripts/schema-hash.ts",
-    "demo:iteration": "tsx scripts/iteration-demo.ts"
+    "demo:iteration": "tsx scripts/iteration-demo.ts",
+    "db:backup": "tsx scripts/backup.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.1",
