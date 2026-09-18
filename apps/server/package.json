@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --conditions=source src/main.ts",
+    "dev": "tsx watch --conditions=source src/main.ts --dev",
     "build": "tsc -b",
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "@fastify/rate-limit": "^11.2.0",
     "@fastify/static": "^10.1.4",
     "better-sqlite3": "^13.0.3",
     "fastify": "^5.12.5",

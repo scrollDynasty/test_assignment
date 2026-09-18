@@ -1,5 +1,12 @@
-import { referencedAnswers } from './conditions.js';
-import { FunnelConfigSchema, isInteractive, type FunnelConfig } from './config.js';
+import { referencedLeaves } from './conditions.js';
+import {
+  FunnelConfigSchema,
+  isInteractive,
+  type FunnelConfig,
+  type InteractiveStep,
+  type LeafCondition,
+  type ResolvedFunnel,
+} from './config.js';
 import { resolveVariant } from './resolve.js';
 
 export interface ConfigIssue {
@@ -14,6 +21,9 @@ export type ConfigValidation =
 /**
  * Publish-time gate. A version that passes this can be rendered and evaluated by the current runtime
  * for every variant, so a bad config is rejected before it can reach a single session.
+ *
+ * Structural rules are checked on what each variant actually shows (after overrides are applied),
+ * not only on the base steps: an override could otherwise change a step's type, input name or condition.
  */
 export function validateConfig(raw: unknown): ConfigValidation {
   const parsed = FunnelConfigSchema.safeParse(raw);
@@ -28,93 +38,135 @@ export function validateConfig(raw: unknown): ConfigValidation {
   const errors: ConfigIssue[] = [];
   const warnings: ConfigIssue[] = [];
 
-  // Steps: key matches id, input names are unique.
-  const inputOwner = new Map<string, string>();
+  // --- References between parts of the config ---
   for (const [key, step] of Object.entries(config.steps)) {
     if (step.id !== key) errors.push({ path: `steps.${key}.id`, message: `id "${step.id}" does not match key "${key}"` });
-    if (isInteractive(step)) {
-      const owner = inputOwner.get(step.input.name);
-      if (owner) errors.push({ path: `steps.${key}.input.name`, message: `input "${step.input.name}" already used by ${owner}` });
-      inputOwner.set(step.input.name, key);
-    }
   }
-
   for (const [key, result] of Object.entries(config.results)) {
     if (result.id !== key) errors.push({ path: `results.${key}.id`, message: `id "${result.id}" does not match key "${key}"` });
   }
   config.resultRules.forEach((rule, i) => {
     if (!config.results[rule.resultId]) errors.push({ path: `resultRules.${i}.resultId`, message: `unknown result "${rule.resultId}"` });
-    for (const name of referencedAnswers(rule.when)) {
-      if (!inputOwner.has(name)) errors.push({ path: `resultRules.${i}.when`, message: `unknown answer "${name}"` });
-    }
   });
   if (!config.results[config.defaultResultId]) {
     errors.push({ path: 'defaultResultId', message: `unknown result "${config.defaultResultId}"` });
   }
+  const eventNames = config.events.allowed.map((e) => e.name);
+  if (new Set(eventNames).size !== eventNames.length) errors.push({ path: 'events.allowed', message: 'duplicate event names' });
 
   const variants = Object.entries(config.experiment.variants);
   if (variants.length === 0) errors.push({ path: 'experiment.variants', message: 'at least one variant is required' });
-
   for (const [name, variant] of variants) {
     const base = `experiment.variants.${name}`;
-    const seq = variant.stepSequence;
-
-    if (new Set(seq).size !== seq.length) errors.push({ path: `${base}.stepSequence`, message: 'duplicate step ids' });
-    seq.forEach((id, i) => {
+    if (new Set(variant.stepSequence).size !== variant.stepSequence.length) {
+      errors.push({ path: `${base}.stepSequence`, message: 'duplicate step ids' });
+    }
+    variant.stepSequence.forEach((id, i) => {
       if (!config.steps[id]) errors.push({ path: `${base}.stepSequence.${i}`, message: `unknown step "${id}"` });
     });
-    const resultSteps = seq.filter((id) => config.steps[id]?.type === 'result');
-    if (resultSteps.length !== 1 || config.steps[seq[seq.length - 1] ?? '']?.type !== 'result') {
-      errors.push({ path: `${base}.stepSequence`, message: 'must contain exactly one result step, and it must be last' });
-    }
-
     for (const id of Object.keys(variant.stepOverrides ?? {})) {
       if (!config.steps[id]) errors.push({ path: `${base}.stepOverrides.${id}`, message: `unknown step "${id}"` });
-      else if (!seq.includes(id)) warnings.push({ path: `${base}.stepOverrides.${id}`, message: 'step is not in this variant' });
+      else if (!variant.stepSequence.includes(id)) warnings.push({ path: `${base}.stepOverrides.${id}`, message: 'step is not in this variant' });
     }
     for (const id of Object.keys(variant.resultOverrides ?? {})) {
       if (!config.results[id]) errors.push({ path: `${base}.resultOverrides.${id}`, message: `unknown result "${id}"` });
     }
-
-    // Branching conditions may only look back: the step that owns the answer must come earlier in this variant.
-    seq.forEach((id, pos) => {
-      const step = config.steps[id];
-      if (!step?.visibleWhen) return;
-      for (const answer of referencedAnswers(step.visibleWhen)) {
-        const owner = inputOwner.get(answer);
-        const ownerPos = owner ? seq.indexOf(owner) : -1;
-        if (ownerPos < 0 || ownerPos >= pos) {
-          errors.push({
-            path: `steps.${id}.visibleWhen`,
-            message: `variant ${name}: answer "${answer}" is not asked before "${id}"`,
-          });
-        }
-      }
-    });
-
-    for (const [i, rule] of config.resultRules.entries()) {
-      for (const answer of referencedAnswers(rule.when)) {
-        const owner = inputOwner.get(answer);
-        if (owner && !seq.includes(owner)) {
-          warnings.push({ path: `resultRules.${i}`, message: `variant ${name} never asks "${answer}"; this rule can only match without it` });
-        }
-      }
-    }
   }
+  if (errors.length > 0) return { ok: false, errors, warnings };
 
-  // Overrides must still produce valid steps/results.
-  if (errors.length === 0) {
-    for (const [name] of variants) {
-      try {
-        resolveVariant(config, name);
-      } catch (e) {
-        errors.push({ path: `experiment.variants.${name}`, message: `overrides produce an invalid step or result: ${(e as Error).message}` });
-      }
+  // --- What every variant really shows ---
+  for (const [name] of variants) {
+    let funnel: ResolvedFunnel;
+    try {
+      funnel = resolveVariant(config, name);
+    } catch (e) {
+      errors.push({ path: `experiment.variants.${name}`, message: `overrides produce an invalid step or result: ${(e as Error).message}` });
+      continue;
     }
+    checkVariant(funnel, `experiment.variants.${name}`, errors, warnings);
   }
-
-  const eventNames = config.events.allowed.map((e) => e.name);
-  if (new Set(eventNames).size !== eventNames.length) errors.push({ path: 'events.allowed', message: 'duplicate event names' });
 
   return errors.length === 0 ? { ok: true, config, warnings } : { ok: false, errors, warnings };
 }
+
+function checkVariant(funnel: ResolvedFunnel, path: string, errors: ConfigIssue[], warnings: ConfigIssue[]): void {
+  const v = funnel.variant;
+  const seq = funnel.sequence;
+
+  const last = funnel.steps[seq[seq.length - 1] ?? ''];
+  const resultSteps = seq.filter((id) => funnel.steps[id]?.type === 'result');
+  if (resultSteps.length !== 1 || last?.type !== 'result') {
+    errors.push({ path: `${path}.stepSequence`, message: 'must contain exactly one result step, and it must be last' });
+  }
+  if (last?.type === 'result' && last.visibleWhen) {
+    errors.push({ path: `steps.${last.id}.visibleWhen`, message: `variant ${v}: the result step must always be reachable` });
+  }
+
+  // Input names are unique among the steps this variant shows; remember where each is asked.
+  const owner = new Map<string, { step: InteractiveStep; pos: number }>();
+  seq.forEach((id, pos) => {
+    const step = funnel.steps[id];
+    if (!step || !isInteractive(step)) return;
+    if (owner.has(step.input.name)) {
+      errors.push({ path: `steps.${id}.input.name`, message: `variant ${v}: input "${step.input.name}" is asked twice` });
+    }
+    owner.set(step.input.name, { step, pos });
+  });
+
+  // Branching conditions may only look back, and must be satisfiable given the owning question.
+  seq.forEach((id, pos) => {
+    const step = funnel.steps[id];
+    if (!step?.visibleWhen) return;
+    for (const leaf of referencedLeaves(step.visibleWhen)) {
+      const o = owner.get(leaf.answer);
+      if (!o || o.pos >= pos) {
+        errors.push({ path: `steps.${id}.visibleWhen`, message: `variant ${v}: answer "${leaf.answer}" is not asked before "${id}"` });
+        continue;
+      }
+      checkLeaf(leaf, o.step, `steps.${id}.visibleWhen`, v, errors);
+    }
+  });
+
+  funnel.resultRules.forEach((rule, i) => {
+    for (const leaf of referencedLeaves(rule.when)) {
+      const o = owner.get(leaf.answer);
+      if (!o) {
+        warnings.push({ path: `resultRules.${i}`, message: `variant ${v} never asks "${leaf.answer}"; that condition is always false there` });
+        continue;
+      }
+      checkLeaf(leaf, o.step, `resultRules.${i}.when`, v, errors);
+    }
+  });
+}
+
+/** Rejects conditions that can never match because the value does not fit the question it refers to. */
+function checkLeaf(leaf: LeafCondition, step: InteractiveStep, path: string, variant: string, errors: ConfigIssue[]): void {
+  const fail = (message: string): void => void errors.push({ path, message: `variant ${variant}: "${leaf.answer}" ${leaf.operator}: ${message}` });
+  const { operator, value } = leaf;
+  if (operator === 'exists') return;
+
+  if (step.type === 'number') {
+    if (operator === 'contains') return fail('contains is only valid for multi-select');
+    if (operator === 'in' || operator === 'not_in') {
+      if (!Array.isArray(value) || !value.every((x) => typeof x === 'number')) fail('expects an array of numbers');
+    } else if (typeof value !== 'number') fail('expects a number');
+    return;
+  }
+
+  const options = new Set(step.input.options.map((o) => o.value));
+  const isOption = (x: unknown) => typeof x === 'string' && options.has(x);
+  if (operator === 'gt' || operator === 'gte' || operator === 'lt' || operator === 'lte') return fail('numeric comparison on a select question');
+  if (operator === 'in' || operator === 'not_in') {
+    if (!Array.isArray(value) || !value.every(isOption)) fail(`expects an array of options (${[...options].join(', ')})`);
+    return;
+  }
+  if (operator === 'contains') {
+    if (step.type !== 'multi-select') return fail('contains is only valid for multi-select');
+    if (!isOption(value)) fail(`unknown option ${JSON.stringify(value)}`);
+    return;
+  }
+  // eq / neq
+  if (step.type === 'multi-select') return fail('use contains/in for multi-select answers');
+  if (!isOption(value)) fail(`unknown option ${JSON.stringify(value)}`);
+}
+

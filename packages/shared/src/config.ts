@@ -184,7 +184,7 @@ export interface ResolvedFunnel {
   results: Record<string, Result>;
   resultRules: { resultId: string; when: Condition }[];
   defaultResultId: string;
-  progress: { excludeTypes: string[] };
+  progress: { excludeTypes: string[]; countVisibleOnly: boolean };
   events: EventsConfig;
 }
 

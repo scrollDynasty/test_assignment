@@ -64,7 +64,10 @@ export function resolveVariant(config: FunnelConfig, variant: string): ResolvedF
     results,
     resultRules: config.resultRules.map((r) => ({ resultId: r.resultId, when: r.when })),
     defaultResultId: config.defaultResultId,
-    progress: { excludeTypes: config.progress?.excludeTypes ?? ['info', 'result'] },
+    progress: {
+      excludeTypes: config.progress?.excludeTypes ?? ['info', 'result'],
+      countVisibleOnly: config.progress?.countVisibleOnly ?? true,
+    },
     events: config.events,
   };
 }

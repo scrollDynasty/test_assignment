@@ -47,6 +47,7 @@ export function firstStepId(funnel: ResolvedFunnel): string {
 export function nextStepId(funnel: ResolvedFunnel, answers: Answers, currentId: string): string | null {
   const { visibleSteps } = computeVisibility(funnel, answers);
   const from = funnel.sequence.indexOf(currentId);
+  if (from < 0) throw new Error(`Step "${currentId}" is not part of this funnel`);
   for (let i = from + 1; i < funnel.sequence.length; i++) {
     const id = funnel.sequence[i];
     if (id !== undefined && visibleSteps.includes(id)) return id;
@@ -61,10 +62,14 @@ export interface Progress {
   count: number;
 }
 
-/** Progress counts only visible steps whose type is not excluded (info/result in all provided configs). */
+/**
+ * Progress counts steps whose type is not excluded (info/result in all provided configs); with
+ * `countVisibleOnly` (true in every provided config) only steps visible to this user are counted.
+ */
 export function computeProgress(funnel: ResolvedFunnel, answers: Answers, currentId: string): Progress {
   const excluded = new Set(funnel.progress.excludeTypes);
-  const counted = computeVisibility(funnel, answers).visibleSteps.filter((id) => {
+  const pool = funnel.progress.countVisibleOnly ? computeVisibility(funnel, answers).visibleSteps : funnel.sequence;
+  const counted = pool.filter((id) => {
     const step = funnel.steps[id];
     return step !== undefined && !excluded.has(step.type);
   });

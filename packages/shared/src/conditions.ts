@@ -1,25 +1,44 @@
 import type { AnswerValue, Answers, Condition, LeafCondition } from './config.js';
 
+/** true / false, or null when the condition depends on a question that has not been answered. */
+type Truth = boolean | null;
+
 /**
- * Evaluates a condition tree against answers.
+ * Evaluates a condition tree against answers with three-valued (Kleene) logic.
  *
- * A leaf whose answer is missing is false for every operator (including `neq`/`not_in`),
- * because "not answered yet" must never open a branch. `{not: …}` is a plain negation on top of that.
+ * A leaf whose answer is missing is *unknown*, not false, and `not(unknown)` stays unknown.
+ * The final verdict treats unknown as false, so "not answered yet" can never open a branch,
+ * no matter whether the condition is written positively or with `not`.
+ * `exists` is the one operator that is decidable without an answer.
  */
 export function evaluateCondition(condition: Condition, answers: Answers): boolean {
-  if ('all' in condition) return condition.all.every((c) => evaluateCondition(c, answers));
-  if ('any' in condition) return condition.any.some((c) => evaluateCondition(c, answers));
-  if ('not' in condition) return !evaluateCondition(condition.not, answers);
+  return evaluate(condition, answers) === true;
+}
+
+function evaluate(condition: Condition, answers: Answers): Truth {
+  if ('all' in condition) {
+    const parts = condition.all.map((c) => evaluate(c, answers));
+    if (parts.includes(false)) return false;
+    return parts.includes(null) ? null : true;
+  }
+  if ('any' in condition) {
+    const parts = condition.any.map((c) => evaluate(c, answers));
+    if (parts.includes(true)) return true;
+    return parts.includes(null) ? null : false;
+  }
+  if ('not' in condition) {
+    const inner = evaluate(condition.not, answers);
+    return inner === null ? null : !inner;
+  }
   return evaluateLeaf(condition, answers[condition.answer]);
 }
 
-function evaluateLeaf(leaf: LeafCondition, actual: AnswerValue | undefined): boolean {
-  if (actual === undefined) return false;
+function evaluateLeaf(leaf: LeafCondition, actual: AnswerValue | undefined): Truth {
+  if (leaf.operator === 'exists') return actual !== undefined;
+  if (actual === undefined) return null;
   const expected = leaf.value;
 
   switch (leaf.operator) {
-    case 'exists':
-      return true;
     case 'eq':
       return !Array.isArray(actual) && actual === expected;
     case 'neq':
@@ -59,10 +78,15 @@ function compareNumbers(op: 'gt' | 'gte' | 'lt' | 'lte', actual: AnswerValue, ex
   }
 }
 
-/** Collects every answer name referenced anywhere in a condition tree. */
+/** Every leaf (answer + operator + value) in a condition tree. */
+export function referencedLeaves(condition: Condition): LeafCondition[] {
+  if ('all' in condition) return condition.all.flatMap(referencedLeaves);
+  if ('any' in condition) return condition.any.flatMap(referencedLeaves);
+  if ('not' in condition) return referencedLeaves(condition.not);
+  return [condition];
+}
+
+/** Every answer name referenced anywhere in a condition tree. */
 export function referencedAnswers(condition: Condition): string[] {
-  if ('all' in condition) return condition.all.flatMap(referencedAnswers);
-  if ('any' in condition) return condition.any.flatMap(referencedAnswers);
-  if ('not' in condition) return referencedAnswers(condition.not);
-  return [condition.answer];
+  return referencedLeaves(condition).map((l) => l.answer);
 }

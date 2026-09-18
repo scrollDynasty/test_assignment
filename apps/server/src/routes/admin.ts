@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { Services } from '../app.js';
@@ -19,6 +20,9 @@ function tokenMatches(given: unknown, expected: string): boolean {
 export const adminRoutes =
   (services: Services, db: Db, adminToken: string): FastifyPluginAsync =>
   async (app) => {
+    // Public URL: slow down token guessing. Scoped to /api/admin only; the funnel and events API are not limited here.
+    await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
+
     app.addHook('onRequest', async (req) => {
       if (!tokenMatches(req.headers['x-admin-token'], adminToken)) {
         throw new HttpError(401, 'unauthorized', 'Missing or invalid x-admin-token');
