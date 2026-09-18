@@ -6,3 +6,4 @@ export * from './validation.js';
 export * from './validateConfig.js';
 export * from './events.js';
 export * from './api.js';
+export * from './analytics.js';
