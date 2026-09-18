@@ -105,7 +105,7 @@ export function DashboardPage() {
             <input type="checkbox" checked={includeOverrides} onChange={(e) => setFilter('include_overrides', e.target.checked ? 'true' : '')} />
             {t('dash.includeOverrides')}
           </label>
-          <button onClick={() => void load()} disabled={loading}>{loading ? t('dash.loading') : t('dash.refresh')}</button>
+          <button className="btn" onClick={() => void load()} disabled={loading}>{loading ? t('dash.loading') : t('dash.refresh')}</button>
         </div>
       </header>
 
@@ -268,7 +268,7 @@ function StepTable({ name, v }: { name: string; v: VariantReport }) {
     <div className="card">
       <h3>{t('dash.variant', { name })}</h3>
       <div className="table-wrap">
-      <table className="steps">
+      <table>
         <thead>
           <tr><th>{t('dash.step')}</th><th>{t('dash.viewed')}</th><th>{t('dash.passed')}</th><th>{t('dash.conv')}</th><th>{t('dash.reach')}</th><th>{t('dash.dropoff')}</th></tr>
         </thead>

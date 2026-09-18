@@ -22,7 +22,7 @@ const invalidProps = (invalid: boolean) => (invalid ? { 'aria-invalid': true, 'a
 export function InfoStep({ step, onSubmit }: StepProps<Extract<Step, { type: 'info' }>>) {
   const { t, tc } = useI18n();
   return (
-    <div className="step">
+    <div className="step intro">
       {step.content.eyebrow && <p className="eyebrow">{tc(step.content.eyebrow)}</p>}
       <h1 tabIndex={-1}>{tc(step.content.title)}</h1>
       {step.content.body && <p className="body">{tc(step.content.body)}</p>}
