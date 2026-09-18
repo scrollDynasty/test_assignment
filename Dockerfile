@@ -24,7 +24,7 @@ COPY --from=build /app/packages/shared/dist packages/shared/dist
 COPY --from=build /app/apps/server/package.json apps/server/
 COPY --from=build /app/apps/server/dist apps/server/dist
 COPY --from=build /app/apps/web/dist apps/web/dist
-# The initial version seeded on an empty database; later versions are published at runtime via the admin API.
+# v1 is seeded on an empty database; v2/v3 ship in the image so the iteration demos can publish them at runtime.
 COPY funnel-v1.json funnel-v2.json funnel-v3.json ./
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data && chown node:node /data

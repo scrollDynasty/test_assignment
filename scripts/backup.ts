@@ -4,7 +4,7 @@
  *   npm run db:backup                              # data/funnel.db -> backups/funnel-<timestamp>.db
  *   DB_PATH=/data/funnel.db npm run db:backup -- /data/backups/funnel.db
  *
- * On Fly.io, run it from the machine (`fly ssh console -C "node … "`) or rely on volume snapshots; for point-in-time
+ * On a hosted instance rely on the platform's volume backups (Railway: Volume → Backups); for point-in-time
  * recovery the next step would be Litestream streaming the WAL to object storage.
  */
 import Database from 'better-sqlite3';
