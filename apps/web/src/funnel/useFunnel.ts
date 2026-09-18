@@ -28,6 +28,13 @@ function isMarker(value: unknown, sessionId: string): value is HistoryMarker {
   return typeof value === 'object' && value !== null && (value as HistoryMarker).funnelSession === sessionId;
 }
 
+const pendingKey = (sessionId: string) => `funnel:pending:${sessionId}`;
+
+/** Same user-visible state (history is rebuilt by the server, so it is not compared). */
+function sameState(a: SessionState, b: SessionState): boolean {
+  return a.currentStepId === b.currentStepId && JSON.stringify(a.answers) === JSON.stringify(b.answers);
+}
+
 function urlFor(step: string): string {
   const url = new URL(window.location.href);
   url.searchParams.set('step', step);
@@ -76,7 +83,11 @@ export function useFunnel(funnelId: string): FunnelView {
 
   const sessionRef = useRef<SessionDto | null>(null);
   const trackerRef = useRef<Tracker | null>(null);
-  const saveChain = useRef<Promise<void>>(Promise.resolve());
+  /** Newest state not yet confirmed by the server (latest wins: intermediate states are skipped). */
+  const pendingRef = useRef<SessionState | null>(null);
+  const flushing = useRef<Promise<void> | null>(null);
+  /** Set when we move the browser history ourselves, so the resulting popstate is ignored. */
+  const ignorePop = useRef(false);
 
   // ---------- bootstrap: resume or create ----------
   useEffect(() => {
@@ -125,11 +136,18 @@ export function useFunnel(funnelId: string): FunnelView {
     bootstrap
       .then((session) => {
         if (cancelled) return;
+        // A state that was not confirmed before a refresh / tab close is newer than the server copy: resend it.
+        const unsaved = storage.getJson<SessionState>(pendingKey(session.sessionId));
+        if (unsaved && !sameState(unsaved, session.state)) session = { ...session, state: unsaved };
         sessionRef.current = session;
         trackerRef.current = createTracker(session);
         syncBrowserHistory(session);
         setLoad({ kind: 'ready', session });
         setNavId((n) => n + 1);
+        if (unsaved) {
+          pendingRef.current = unsaved;
+          void flush();
+        }
       })
       .catch((e: unknown) => {
         if (!cancelled) setLoad({ kind: 'error', message: e instanceof Error ? e.message : 'Failed to load' });
@@ -157,40 +175,75 @@ export function useFunnel(funnelId: string): FunnelView {
   }
 
   // ---------- persistence ----------
-  const commit = useCallback((next: SessionState) => {
-    const session = sessionRef.current;
-    if (!session) return;
-    const updated: SessionDto = { ...session, state: next };
-    sessionRef.current = updated;
-    setLoad({ kind: 'ready', session: updated });
+  /** Server copy wins (another tab moved on, or our state was refused): drop everything queued locally. */
+  const adoptServer = useCallback((fresh: SessionDto) => {
+    pendingRef.current = null;
+    storage.remove(pendingKey(fresh.sessionId));
+    sessionRef.current = fresh;
+    setLoad({ kind: 'ready', session: fresh });
     setNavId((n) => n + 1);
+    syncBrowserHistory(fresh);
+  }, []);
 
-    // Saves are serialized; each uses the rev returned by the previous one.
-    saveChain.current = saveChain.current.then(async () => {
-      const current = sessionRef.current;
-      if (!current) return;
-      for (let attempt = 0; attempt < 5; attempt++) {
+  /**
+   * Single-flight saver: at most one PUT in flight, always sending the newest pending state with the
+   * newest rev. Failures keep the state pending (and in localStorage), so it is resent later.
+   */
+  const flush = useCallback((): Promise<void> => {
+    if (flushing.current) return flushing.current;
+    const run = (async () => {
+      let failures = 0;
+      while (pendingRef.current && sessionRef.current) {
+        const state = pendingRef.current;
+        const current = sessionRef.current;
+        pendingRef.current = null;
         try {
-          const saved = await api.saveState(current.sessionId, next, current.rev);
+          const saved = await api.saveState(current.sessionId, state, current.rev);
           // Only the revision is taken from the response: the user may already be one step further locally.
           if (sessionRef.current) sessionRef.current = { ...sessionRef.current, rev: saved.rev };
-          return;
+          if (!pendingRef.current) storage.remove(pendingKey(current.sessionId));
+          failures = 0;
         } catch (e) {
           if (e instanceof ApiError && (e.status === 409 || e.status === 422)) {
-            // Another tab moved on, or the state was rejected: the server copy wins.
             const fresh = await api.getSession(current.sessionId);
-            sessionRef.current = fresh;
-            setLoad({ kind: 'ready', session: fresh });
-            setNavId((n) => n + 1);
-            syncBrowserHistory(fresh);
-            return;
+            if (e.status === 409 && sameState(fresh.state, state)) {
+              // Our earlier write did land (the response was lost, e.g. a timeout): just take the new rev.
+              if (sessionRef.current) sessionRef.current = { ...sessionRef.current, rev: fresh.rev };
+              if (!pendingRef.current) storage.remove(pendingKey(current.sessionId));
+              continue;
+            }
+            adoptServer(fresh);
+            continue;
           }
-          await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+          pendingRef.current ??= state; // keep it (a newer local state, if any, still wins)
+          if (++failures >= 5) {
+            setError('Your progress could not be saved. Check your connection.');
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 500 * 2 ** failures));
         }
       }
-      setError('Your progress could not be saved. Check your connection.');
+    })().finally(() => {
+      flushing.current = null;
     });
-  }, []);
+    flushing.current = run;
+    return run;
+  }, [adoptServer]);
+
+  const commit = useCallback(
+    (next: SessionState) => {
+      const session = sessionRef.current;
+      if (!session) return;
+      const updated: SessionDto = { ...session, state: next };
+      sessionRef.current = updated;
+      setLoad({ kind: 'ready', session: updated });
+      setNavId((n) => n + 1);
+      pendingRef.current = next;
+      storage.setJson(pendingKey(session.sessionId), next);
+      void flush();
+    },
+    [flush],
+  );
 
   // ---------- navigation ----------
   const submit = useCallback(
@@ -238,24 +291,39 @@ export function useFunnel(funnelId: string): FunnelView {
 
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
+      if (ignorePop.current) {
+        ignorePop.current = false;
+        return;
+      }
       const session = sessionRef.current;
       const tracker = trackerRef.current;
       if (!session || !tracker) return;
       const { state } = session;
+      const depth = state.history.length;
+      const here: HistoryMarker = { funnelSession: session.sessionId, step: state.currentStepId, depth };
       const target = isMarker(event.state, session.sessionId) ? event.state : null;
-      const index = target ? state.history.lastIndexOf(target.step) : -1;
-      if (!target || index < 0 || target.depth !== index) {
-        // Forward button, or an entry that is not on the current path: stay where we are.
-        window.history.replaceState(
-          { funnelSession: session.sessionId, step: state.currentStepId, depth: state.history.length } satisfies HistoryMarker,
-          '',
-          urlFor(state.currentStepId),
-        );
+      if (!target) {
+        // An entry from before this session (e.g. before "Start again"): keep showing the current step.
+        window.history.replaceState(here, '', urlFor(state.currentStepId));
         return;
       }
+      if (target.depth >= depth) {
+        // Browser Forward: undo it; moving forward always goes through validation (Continue).
+        if (target.depth > depth) {
+          ignorePop.current = true;
+          window.history.go(depth - target.depth);
+        } else {
+          window.history.replaceState(here, '', urlFor(state.currentStepId));
+        }
+        return;
+      }
+      // Back (possibly several entries at once): the destination is our own path at that depth.
+      const destination = state.history[target.depth];
+      if (!destination) return;
       setError(null);
-      tracker.track('back_clicked', state.currentStepId, { destination_step_id: target.step });
-      commit({ answers: state.answers, history: state.history.slice(0, index), currentStepId: target.step });
+      tracker.track('back_clicked', state.currentStepId, { destination_step_id: destination });
+      window.history.replaceState({ funnelSession: session.sessionId, step: destination, depth: target.depth } satisfies HistoryMarker, '', urlFor(destination));
+      commit({ answers: state.answers, history: state.history.slice(0, target.depth), currentStepId: destination });
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -271,7 +339,8 @@ export function useFunnel(funnelId: string): FunnelView {
   }, [sessionKey]);
 
   const retryLoad = useCallback(() => setReloadToken((t) => t + 1), []);
-  const whenSaved = useCallback(() => saveChain.current, []);
+  /** Resolves when nothing is pending; if an earlier save gave up, this retries it. */
+  const whenSaved = useCallback(() => (pendingRef.current ? flush() : (flushing.current ?? Promise.resolve())), [flush]);
 
   const session = load.kind === 'ready' ? load.session : null;
   const step = session ? (session.funnel.steps[session.state.currentStepId] ?? null) : null;

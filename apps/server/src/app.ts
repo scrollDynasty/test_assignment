@@ -1,3 +1,4 @@
+import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
@@ -18,6 +19,10 @@ export interface AppOptions {
   logger?: boolean;
   /** Directory with the built web app; when set, the server also serves the SPA. */
   webDir?: string;
+  /** Behind a reverse proxy (Fly.io): take the client IP from X-Forwarded-For (used by rate limits). */
+  trustProxy?: boolean;
+  /** Requests per minute per IP on the public write API (sessions, events). */
+  publicRateLimit?: number;
   /** Clock, injectable for tests (TTL). */
   now?: () => number;
 }
@@ -30,7 +35,7 @@ export interface Services {
 }
 
 export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
-  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024 });
+  const app = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: opts.trustProxy ?? false });
   const versions = new VersionsService(opts.db);
   const sessions = new SessionsService(opts.db, versions, opts.now);
   const services: Services = {
@@ -56,8 +61,15 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   });
 
   app.get('/api/health', async () => ({ ok: true }));
-  await app.register(sessionRoutes(services), { prefix: '/api' });
-  await app.register(eventRoutes(services), { prefix: '/api' });
+  // Public write endpoints get a per-IP limit; generous enough for the traffic generator from one machine.
+  await app.register(
+    async (scope) => {
+      await scope.register(rateLimit, { max: opts.publicRateLimit ?? 3000, timeWindow: '1 minute' });
+      await scope.register(sessionRoutes(services));
+      await scope.register(eventRoutes(services));
+    },
+    { prefix: '/api' },
+  );
   await app.register(analyticsRoutes(services), { prefix: '/api' });
   await app.register(adminRoutes(services, opts.db, opts.adminToken), { prefix: '/api/admin' });
 
