@@ -130,21 +130,42 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
 /* ============================================================
    Public funnel
    ============================================================ */
-.funnel-shell { min-height: 100vh; display: flex; flex-direction: column; }
+/* The whole screen is the swipe area (swipe right = back); vertical scrolling stays native. */
+.funnel-shell { position: relative; min-height: 100vh; display: flex; flex-direction: column; touch-action: pan-y; }
+/* Only the language switch, pinned to the corner: it takes no space, so the question sits in the true centre. */
 .funnel-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  padding: 18px clamp(16px, 4vw, 40px);
+  position: absolute;
+  top: 18px;
+  right: clamp(16px, 4vw, 40px);
+  z-index: 1;
 }
-.wordmark { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
 
-.funnel { width: 100%; max-width: 640px; margin: 0 auto; padding: clamp(16px, 7vh, 72px) 16px 64px; }
+/* The step is centred on the screen, a little above the middle (optical centre); a tall step simply scrolls. */
+.funnel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 72px 16px 10vh;
+}
 
-.stepbar { display: flex; align-items: center; min-height: 32px; margin-bottom: 28px; view-transition-name: stepbar; }
-.back { background: none; border: none; padding: 6px 0; color: var(--muted); font-size: 15px; }
-.back:hover { color: var(--ink); }
+/* Back for keyboard / screen-reader users: off-screen until focused, then shown top-left (skip-link pattern). */
+.back-a11y {
+  position: absolute;
+  left: clamp(16px, 4vw, 40px);
+  top: 18px;
+  transform: translateY(-200%);
+  padding: 6px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--ink);
+  font-size: 14px;
+}
+.back-a11y:focus-visible { transform: none; }
 
 /*
  * Step change = "dissolve": the answered screen evaporates (fades, blurs, drifts up a little and grows slightly),
@@ -157,8 +178,6 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
 ::view-transition-group(step) { animation-duration: 0.62s; }
 ::view-transition-old(step) { animation: evaporate 0.3s cubic-bezier(0.4, 0, 1, 1) both; }
 ::view-transition-new(step) { animation: condense 0.42s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both; }
-::view-transition-old(stepbar) { animation: fade-out 0.2s ease both; }
-::view-transition-new(stepbar) { animation: fade-in 0.3s ease 0.3s both; }
 /* "Reveal" (result CTA): the title stays put; only the button evaporates and the plan condenses in below it. */
 .vt-reveal .result .actions { view-transition-name: result-actions; }
 .vt-reveal::view-transition-old(step) { animation: none; opacity: 0; }
@@ -171,7 +190,6 @@ code { font-family: var(--font-mono); font-size: 0.82em; background: var(--accen
 @keyframes condense {
   from { opacity: 0; filter: blur(10px); transform: translateY(10px) scale(0.985); }
 }
-@keyframes fade-out { to { opacity: 0; } }
 @keyframes fade-in { from { opacity: 0; } }
 /* Browsers without view transitions: the new screen still condenses in (the old one just disappears). */
 @supports not (view-transition-name: none) {
