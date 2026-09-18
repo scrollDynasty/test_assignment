@@ -393,7 +393,7 @@ async function main() {
     console.table(rows);
   }
   // Fresh synthetic sessions are all "recently active"; the link turns the in-progress window off so they show as drop-offs.
-  console.log(`\nDashboard: ${API.replace(/:3000$/, ':5173')}/analytics?in_progress_minutes=0`);
+  console.log(`\nDashboard: ${API.replace(/:3000$/, ':5173')}/internal/analytics?in_progress_minutes=0`);
   if (VERIFY) {
     console.log(ok ? '\nVERIFY OK: dashboard numbers match the generator ground truth.' : '\nVERIFY FAILED');
     process.exit(ok ? 0 : 1);

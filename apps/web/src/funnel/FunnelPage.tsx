@@ -64,33 +64,35 @@ export function FunnelPage() {
   const showProgress = progress !== null && progress.count > 0 && step.type !== 'info' && step.type !== 'result';
 
   return (
-    <Shell>
-      <div className="topbar">
+    <Shell title={tc(session.funnel.title)}>
+      <div className="stepbar">
         {view.canGoBack && step.type !== 'result' ? (
           <button className="back" onClick={view.back}>{t('funnel.back')}</button>
         ) : (
           <span />
         )}
-        <span className="topbar-right">
-          {showProgress && <span className="progress-label">{t('funnel.progress', { index: progress.index, count: progress.count })}</span>}
-          <LangSwitch />
-        </span>
+        {showProgress && (
+          <>
+            {/* One segment per visible question: a branch that opens a question adds a segment. */}
+            <div
+              className="progress"
+              role="progressbar"
+              aria-label={t('funnel.progressLabel')}
+              aria-valuemin={0}
+              aria-valuemax={progress.count}
+              aria-valuenow={progress.index}
+            >
+              {Array.from({ length: progress.count }, (_, i) => (
+                <span key={i} className={i < progress.index ? 'on' : ''} />
+              ))}
+            </div>
+            <span className="progress-label">{t('funnel.progress', { index: progress.index, count: progress.count })}</span>
+          </>
+        )}
       </div>
-      {showProgress && (
-        <div
-          className="progress"
-          role="progressbar"
-          aria-label={t('funnel.progressLabel')}
-          aria-valuemin={0}
-          aria-valuemax={progress.count}
-          aria-valuenow={progress.index}
-        >
-          <div style={{ width: `${(progress.index / progress.count) * 100}%` }} />
-        </div>
-      )}
 
       {/* key: remount per navigation so each step starts from its saved answer */}
-      <div key={`${currentStepId}:${depth}`}>
+      <div key={`${currentStepId}:${depth}`} className="step-slot">
         {step.type === 'info' && <InfoStep step={step} {...common} />}
         {step.type === 'single-select' && <SingleSelectStep step={step} {...common} />}
         {step.type === 'multi-select' && <MultiSelectStep step={step} {...common} />}
@@ -127,6 +129,17 @@ function useDebugFlag(): boolean {
   }
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
-  return <main className="funnel">{children}</main>;
+function Shell({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <div className="funnel-shell">
+      <header className="funnel-head">
+        <span className="wordmark">
+          <span className="wordmark-glyph" aria-hidden="true" />
+          {title}
+        </span>
+        <LangSwitch />
+      </header>
+      <main className="funnel">{children}</main>
+    </div>
+  );
 }

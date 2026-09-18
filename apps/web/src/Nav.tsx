@@ -7,7 +7,7 @@ export function Nav({ internal = true }: { internal?: boolean }) {
   const { t } = useI18n();
   return (
     <nav className="nav">
-      <span className="brand">{t('nav.brand')}</span>
+      <span className="brand"><span className="wordmark-glyph" aria-hidden="true" />{t('nav.brand')}</span>
       {internal && (
         <>
           <NavLink to="/internal/analytics">{t('nav.analytics')}</NavLink>
