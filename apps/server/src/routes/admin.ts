@@ -1,33 +1,21 @@
-import { timingSafeEqual } from 'node:crypto';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { Services } from '../app.js';
+import type { Auth } from '../auth.js';
 import { schemaHash, type Db } from '../db.js';
-import { HttpError } from '../errors.js';
 
 const FunnelParams = z.object({ funnelId: z.string().min(1) });
 const VersionParams = FunnelParams.extend({ version: z.coerce.number().int().positive() });
 
-function tokenMatches(given: unknown, expected: string): boolean {
-  if (typeof given !== 'string') return false;
-  const a = Buffer.from(given);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
-/** Internal management API. Protected by a shared token because the app is deployed on a public URL. */
+/** Internal management API: internal login (cookie) or the access key header (CLI scripts). */
 export const adminRoutes =
-  (services: Services, db: Db, adminToken: string): FastifyPluginAsync =>
+  (services: Services, db: Db, auth: Auth): FastifyPluginAsync =>
   async (app) => {
     // Public URL: slow down token guessing. Scoped to /api/admin only; the funnel and events API are not limited here.
     await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
 
-    app.addHook('onRequest', async (req) => {
-      if (!tokenMatches(req.headers['x-admin-token'], adminToken)) {
-        throw new HttpError(401, 'unauthorized', 'Missing or invalid x-admin-token');
-      }
-    });
+    app.addHook('onRequest', auth.guard);
 
     /** Schema fingerprint: must stay identical across publish/rollback (proof for iteration 2). */
     app.get('/schema', async () => ({

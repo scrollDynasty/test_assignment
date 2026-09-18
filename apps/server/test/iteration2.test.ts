@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { describe, expect, it } from 'vitest';
 import type { AnalyticsReport, IncomingEvent, SessionDto } from '@funnel/shared';
 import { schemaHash } from '../src/db.js';
-import { createSession, getSession, makeApp, putState, rollback, uploadAndPublish, walkToResult } from './helpers.js';
+import { ADMIN, createSession, getSession, makeApp, putState, rollback, uploadAndPublish, walkToResult } from './helpers.js';
 
 /*
  * TZ §8 — second iteration with the real funnel-v3.json, following the real release history of this project:
@@ -32,7 +32,7 @@ async function sendEvents(app: FastifyInstance, events: IncomingEvent[]) {
 }
 
 async function report(app: FastifyInstance, version: number): Promise<AnalyticsReport> {
-  return (await app.inject({ method: 'GET', url: `/api/analytics?funnelId=workstyle-planner&version=${version}&include_overrides=true&in_progress_minutes=0` })).json() as AnalyticsReport;
+  return (await app.inject({ method: 'GET', url: `/api/analytics?funnelId=workstyle-planner&version=${version}&include_overrides=true&in_progress_minutes=0`, headers: ADMIN })).json() as AnalyticsReport;
 }
 
 describe('TZ §8 — iteration 2 (funnel-v3.json) without schema changes', () => {

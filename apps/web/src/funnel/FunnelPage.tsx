@@ -10,6 +10,9 @@ export function FunnelPage() {
   const { funnelId = 'workstyle-planner' } = useParams();
   const view = useFunnel(funnelId);
   const { t, tc } = useI18n();
+  // Visitors must not see which experiment arm they are in (it would bias the A/B test) nor links to the internal
+  // area. Version and variant are shown only in debug mode (?debug=1, remembered for the tab).
+  const debug = useDebugFlag();
   const { load, step, progress, tracker, error } = view;
   const session = load.kind === 'ready' ? load.session : null;
   const currentStepId = session?.state.currentStepId;
@@ -89,12 +92,20 @@ export function FunnelPage() {
           {error === 'save_failed' ? t('funnel.saveError') : tc(error)}
         </p>
       )}
-      <footer className="meta">
-        {t('funnel.meta', { version: session.version, variant: session.variant })} · <a href="/analytics">{t('nav.analytics')}</a> ·{' '}
-        <a href="/admin">{t('nav.versions')}</a>
-      </footer>
+      {debug && <footer className="meta">{t('funnel.meta', { version: session.version, variant: session.variant })}</footer>}
     </Shell>
   );
+}
+
+function useDebugFlag(): boolean {
+  const flag = new URLSearchParams(window.location.search).get('debug');
+  try {
+    if (flag === '1') window.sessionStorage.setItem('funnel:debug', '1');
+    if (flag === '0') window.sessionStorage.removeItem('funnel:debug');
+    return window.sessionStorage.getItem('funnel:debug') === '1';
+  } catch {
+    return flag === '1';
+  }
 }
 
 function Shell({ children }: { children: React.ReactNode }) {

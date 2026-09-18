@@ -1,16 +1,27 @@
 import { NavLink } from 'react-router-dom';
 import { LangSwitch, useI18n } from './i18n';
+import { logout } from './internal/InternalGate';
 
-export function Nav() {
+/** Navigation of the internal area; the public funnel has no links to it. */
+export function Nav({ internal = true }: { internal?: boolean }) {
   const { t } = useI18n();
   return (
     <nav className="nav">
       <span className="brand">{t('nav.brand')}</span>
-      <NavLink to="/f/workstyle-planner">{t('nav.funnel')}</NavLink>
-      <NavLink to="/analytics">{t('nav.analytics')}</NavLink>
-      <NavLink to="/admin">{t('nav.versions')}</NavLink>
+      {internal && (
+        <>
+          <NavLink to="/internal/analytics">{t('nav.analytics')}</NavLink>
+          <NavLink to="/internal/versions">{t('nav.versions')}</NavLink>
+          <a href="/f/workstyle-planner" target="_blank" rel="noreferrer">{t('nav.funnel')} ↗</a>
+        </>
+      )}
       <span className="spacer" />
       <LangSwitch />
+      {internal && (
+        <button className="link logout" onClick={() => void logout()}>
+          {t('nav.logout')}
+        </button>
+      )}
     </nav>
   );
 }

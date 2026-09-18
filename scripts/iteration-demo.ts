@@ -71,7 +71,7 @@ async function http<T>(method: string, path: string, body?: unknown, admin = fal
 const schemaHash = async () => (await http<{ schemaHash: string }>('GET', '/api/admin/schema', undefined, true)).schemaHash;
 const activeVersion = async () => (await http<{ activeVersion: number }>('GET', `/api/admin/funnels/${FUNNEL}/versions`, undefined, true)).activeVersion;
 const analytics = (version: number) =>
-  http<AnalyticsReport>('GET', `/api/analytics?funnelId=${FUNNEL}&version=${version}&include_overrides=true&in_progress_minutes=0`);
+  http<AnalyticsReport>('GET', `/api/analytics?funnelId=${FUNNEL}&version=${version}&include_overrides=true&in_progress_minutes=0`, undefined, true);
 
 /** A scripted user: deterministic answers, events sent like the browser does. */
 class User {

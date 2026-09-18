@@ -1,7 +1,9 @@
+import fastifyCookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
+import { createAuth } from './auth.js';
 import type { Db } from './db.js';
 import { HttpError } from './errors.js';
 import { adminRoutes } from './routes/admin.js';
@@ -10,6 +12,7 @@ import { EventsService } from './modules/events.js';
 import { SessionsService } from './modules/sessions.js';
 import { VersionsService } from './modules/versions.js';
 import { analyticsRoutes } from './routes/analytics.js';
+import { authRoutes } from './routes/auth.js';
 import { eventRoutes } from './routes/events.js';
 import { sessionRoutes } from './routes/sessions.js';
 
@@ -70,8 +73,12 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     },
     { prefix: '/api' },
   );
-  await app.register(analyticsRoutes(services), { prefix: '/api' });
-  await app.register(adminRoutes(services, opts.db, opts.adminToken), { prefix: '/api/admin' });
+  // Internal area (TZ: "внутренняя страница", "внутренний dashboard"): analytics and version management need a login.
+  const auth = createAuth(opts.adminToken, opts.now);
+  await app.register(fastifyCookie);
+  await app.register(authRoutes(auth), { prefix: '/api' });
+  await app.register(analyticsRoutes(services, auth), { prefix: '/api' });
+  await app.register(adminRoutes(services, opts.db, auth), { prefix: '/api/admin' });
 
   if (opts.webDir) {
     // Single deployable: the server also serves the built SPA; unknown non-API GETs fall back to index.html.
