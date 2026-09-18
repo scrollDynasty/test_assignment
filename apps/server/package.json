@@ -1,0 +1,20 @@
+{
+  "name": "@funnel/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --conditions=source src/main.ts",
+    "build": "tsc -b",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.4",
+    "better-sqlite3": "^13.0.3",
+    "fastify": "^5.12.5",
+    "uuid": "^14.0.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0"
+  }
+}

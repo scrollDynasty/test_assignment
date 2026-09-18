@@ -1,0 +1,33 @@
+{
+  "name": "funnel-runtime",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @funnel/server & npm run dev -w @funnel/web",
+    "build": "npm run build -w @funnel/shared && npm run build -w @funnel/web && npm run build -w @funnel/server",
+    "start": "npm run start -w @funnel/server",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b",
+    "lint": "eslint .",
+    "traffic": "tsx scripts/traffic.ts",
+    "publish-config": "tsx scripts/publish.ts",
+    "db:schema-hash": "tsx scripts/schema-hash.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.1",
+    "eslint": "^10.10.0",
+    "tsx": "^4.23.13",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.1"
+  }
+}
