@@ -220,6 +220,24 @@ async function main() {
   }
   const newStats = after.versions.find((v) => v.version === config.version);
   check(`analytics of v${config.version} present after rollback`, (newStats?.started ?? 0) > 0, `started ${newStats?.started}, reached result ${newStats?.reachedResult}`);
+  // What the new version changes must be visible in its own analytics (generic: read from the config).
+  const newConfig = JSON.parse(readFileSync(CONFIG_PATH as string, 'utf8')) as {
+    events: { allowed: { name: string }[] };
+    experiment: { variants: Record<string, { stepSequence: string[] }> };
+  };
+  const reportNew = await analytics(config.version);
+  for (const [variant, def] of Object.entries(newConfig.experiment.variants)) {
+    const steps = reportNew.selected?.variants[variant]?.steps.map((s) => s.stepId) ?? [];
+    check(`v${config.version} variant ${variant}: analytics steps follow the config`, JSON.stringify(steps) === JSON.stringify(def.stepSequence), steps.join(' › '));
+  }
+  const core = ['session_started', 'step_viewed', 'answer_submitted', 'step_completed', 'back_clicked', 'result_viewed', 'cta_clicked'];
+  for (const name of newConfig.events.allowed.map((e) => e.name).filter((n) => !core.includes(n))) {
+    const row = reportNew.selected?.otherEvents.find((o) => o.name === name);
+    check(`new event "${name}" collected for v${config.version}`, (row?.sessions ?? 0) > 0, row ? `${row.sessions} sessions (${JSON.stringify(row.byVariant)})` : 'missing');
+    const inOld = (await analytics(oldVersion)).selected?.otherEvents.find((o) => o.name === name);
+    check(`new event "${name}" absent from v${oldVersion}`, !inOld, inOld ? `${inOld.sessions} sessions` : 'none — older sessions never send it');
+  }
+
   for (const v of [oldVersion, config.version]) {
     const r = await analytics(v);
     const bad = Object.entries(r.selected?.variants ?? {}).filter(([, x]) => !x.invariantOk);
