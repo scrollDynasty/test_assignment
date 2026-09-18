@@ -44,6 +44,22 @@ export function ResultStep({ step, sessionId, tracker, whenSaved, onRestart }: P
     tracker.track('result_viewed', step.id, { result_id: phase.resultId });
   }, [phase, tracker, sessionId, step.id, attempt]);
 
+  // Iteration 2 (v3): `recommendation_expanded` — "the user opens the detailed recommendation after the result CTA".
+  // Sent when the expanded list has actually rendered, once per result. The tracker drops it for sessions whose
+  // pinned version does not declare the event (v1/v2), so shipping this code before publishing v3 is safe.
+  const expandedSent = useRef<string | null>(null);
+  useEffect(() => {
+    if (!expanded || phase.kind !== 'ready' || !tracker) return;
+    const key = `${sessionId}:${phase.resultId}`;
+    if (expandedSent.current === key) return;
+    expandedSent.current = key;
+    tracker.track('recommendation_expanded', step.id, {
+      result_id: phase.resultId,
+      action: phase.result.cta?.action ?? 'expand_recommendation',
+      source: 'result_cta',
+    });
+  }, [expanded, phase, tracker, sessionId, step.id]);
+
   if (phase.kind === 'loading') {
     return (
       <div className="step result" aria-busy="true">

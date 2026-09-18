@@ -170,12 +170,19 @@ export function DashboardPage() {
             <section>
               <h2>Other events of this version</h2>
               <table>
-                <thead><tr><th>Event</th><th>Sessions</th><th>By variant</th></tr></thead>
+                <thead><tr><th>Event</th><th>Sessions</th><th>By variant (share of that variant&apos;s CTA clickers)</th></tr></thead>
                 <tbody>
                   {selected.otherEvents.map((e) => (
                     <tr key={e.name}>
                       <td><code>{e.name}</code></td><td>{e.sessions}</td>
-                      <td>{Object.entries(e.byVariant).map(([k, n]) => `${k}: ${n}`).join(' · ')}</td>
+                      <td>
+                        {Object.entries(e.byVariant)
+                          .map(([k, n]) => {
+                            const cta = selected.variants[k]?.ctaClicked ?? 0;
+                            return `${k}: ${n}${cta ? ` (${pct(n / cta, 0)})` : ''}`;
+                          })
+                          .join(' · ')}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
