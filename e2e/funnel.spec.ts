@@ -53,6 +53,12 @@ test('a visitor completes the funnel; refresh and Back keep state; retried deliv
   await page.getByRole('button', { name: 'View the action list' }).click();
   await expect(page.getByRole('listitem').first()).toBeVisible();
 
+  // Leaving and coming back later: the finished funnel opens on its result, which has no Back into the questions.
+  await page.goto('/api/health');
+  await openFunnel(page, campaign);
+  await expect(page.getByRole('button', { name: 'View the action list' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '← Back' })).toHaveCount(0);
+
   // Events travel in background batches; the report must converge to exactly one session.
   await expect
     .poll(async () => {

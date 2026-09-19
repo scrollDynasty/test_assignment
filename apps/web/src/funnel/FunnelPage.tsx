@@ -19,7 +19,7 @@ export function FunnelPage() {
   const session = load.kind === 'ready' ? load.session : null;
   const currentStepId = session?.state.currentStepId;
   const shellRef = useRef<HTMLDivElement>(null);
-  useSwipeBack(shellRef, view.canGoBack, view.back);
+  useSwipeBack(shellRef, view.canGoBack && step?.type !== 'result', view.back);
 
   // step_viewed once per navigation to a step (a re-view after Back or refresh is a new, legitimate view).
   // The ref guards against React StrictMode running the effect twice for the same navigation.
@@ -80,9 +80,12 @@ export function FunnelPage() {
       )}
       {/* Back: a small link on mouse/trackpad devices; on touch screens a swipe right (useSwipeBack), and the button is
           shown only when it receives keyboard focus (skip-link pattern). The browser's own Back works everywhere. */}
-      {/* Also on the result: changing one answer must not mean answering everything again. */}
-      {view.canGoBack && <button className="back-link" onClick={view.back}>{t('funnel.back')}</button>}
-      <SwipeHint active={view.canGoBack} />
+      {/* Not on the result: it is the end of the funnel, also for a visitor who comes back later; "Back" there would
+          pull a finished visitor into the questions again. The browser's own Back still returns to the last question. */}
+      {view.canGoBack && step.type !== 'result' && (
+        <button className="back-link" onClick={view.back}>{t('funnel.back')}</button>
+      )}
+      <SwipeHint active={view.canGoBack && step.type !== 'result'} />
 
       {/* key: remount per navigation (also when the server copy is adopted) so each step starts from its saved answer */}
       <div key={navId} className="step-slot">
