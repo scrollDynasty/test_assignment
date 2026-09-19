@@ -73,6 +73,10 @@ describe('internal area access', () => {
     expect((await from({ origin: 'https://evil.example' })).statusCode).toBe(403);
     expect((await from({ 'sec-fetch-site': 'same-site' })).statusCode).toBe(403); // a sibling subdomain
     expect((await from({ 'sec-fetch-site': 'cross-site' })).statusCode).toBe(403);
+    // A percent-encoded path reaches the same route after decoding, so it must hit the same check.
+    for (const url of [`/api/%61dmin/funnels/${FUNNEL}/rollback`, `/%61pi/admin/funnels/${FUNNEL}/rollback`]) {
+      expect((await app.inject({ method: 'POST', url, headers: { cookie, 'sec-fetch-site': 'cross-site' } })).statusCode).toBe(403);
+    }
     // Our own page (same origin) and CLI scripts (no Origin at all) pass the check and reach the handler.
     expect((await from({ origin: 'http://localhost:80', host: 'localhost:80', 'sec-fetch-site': 'same-origin' })).statusCode).toBe(409); // nothing to roll back
     expect((await app.inject({ method: 'POST', url: rollbackUrl, headers: ADMIN })).statusCode).toBe(409);

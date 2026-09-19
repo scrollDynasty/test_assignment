@@ -109,6 +109,59 @@ describe('rate limits cannot be bypassed and are reported correctly', () => {
     await a.close();
   });
 
+  it('wrong access keys share one per-IP budget across the admin and public API', async () => {
+    const a = await app();
+    const codes: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      codes.push((await a.inject({ method: 'GET', url: '/api/admin/funnels', headers: { 'x-admin-token': `wrong-${i}` } })).statusCode);
+      codes.push((await a.inject({ method: 'GET', url: '/api/health', headers: { 'x-admin-token': `other-${i}` } })).statusCode);
+    }
+    expect(codes.filter((c) => c === 429)).toHaveLength(4); // 24 guesses, 20 allowed
+    expect(codes.slice(0, 20).every((c) => c === 401 || c === 200)).toBe(true);
+    // The real key and requests without a key are not affected.
+    expect((await a.inject({ method: 'GET', url: '/api/admin/funnels', headers: { 'x-admin-token': 'test-token' } })).statusCode).toBe(200);
+    expect((await a.inject({ method: 'GET', url: '/api/health' })).statusCode).toBe(200);
+    await a.close();
+  });
+
+  it('the admin API rate limit counts rejected keys (the guard runs after the limiter)', async () => {
+    const a = await app();
+    let limited = 0;
+    for (let i = 0; i < 125; i++) {
+      const res = await a.inject({ method: 'GET', url: '/api/admin/funnels', headers: { 'x-forwarded-for': `10.1.${i}.1` } });
+      if (res.statusCode === 429) limited++;
+    }
+    expect(limited).toBe(7); // no trusted proxy, so one IP: 120 per minute, 2 of them spent on upload + publish
+    await a.close();
+  });
+
+  it('session creation has its own, tighter per-IP limit', async () => {
+    const a = await buildApp({ db: openDb(':memory:'), adminToken: 'test-token', publicRateLimit: 100 });
+    await uploadAndPublish(a, 1);
+    const codes: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      codes.push((await a.inject({ method: 'POST', url: '/api/sessions', payload: { funnelId: FUNNEL } })).statusCode);
+    }
+    expect(codes.filter((c) => c === 201)).toHaveLength(10);
+    expect(codes.slice(10)).toEqual([429, 429]);
+    await a.close();
+  });
+
+  it('oversize UTM values and foreign query params do not block a visitor from starting', async () => {
+    const a = await app();
+    const res = await a.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: { funnelId: FUNNEL, utm: { utm_content: 'x'.repeat(150), utm_campaign: '  spring  ' }, query: { fbclid: 'y'.repeat(300), variant: 'B' } },
+    });
+    expect(res.statusCode).toBe(201);
+    const s = res.json() as SessionDto;
+    expect(s.variant).toBe('B');
+    expect(s.utm.utm_content).toHaveLength(128);
+    expect(s.utm.utm_campaign).toBe('spring');
+    await a.close();
+  });
+
   it('health checks the database', async () => {
     const a = await app();
     expect((await a.inject({ method: 'GET', url: '/api/health' })).json()).toEqual({ ok: true });

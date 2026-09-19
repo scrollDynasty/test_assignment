@@ -17,6 +17,8 @@ import { authRoutes } from './routes/auth.js';
 import { eventRoutes } from './routes/events.js';
 import { sessionRoutes } from './routes/sessions.js';
 
+const WRONG_KEY_LIMIT = 20;
+
 export interface AppOptions {
   db: Db;
   adminToken: string;
@@ -28,7 +30,7 @@ export interface AppOptions {
    * so a client could spoof its IP with its own X-Forwarded-For header and bypass all rate limits.
    */
   trustProxy?: number;
-  /** Requests per minute per IP on the public write API (sessions, events). */
+  /** Requests per minute per IP on the public write API (sessions, events); session creation gets a tenth of it. */
   publicRateLimit?: number;
   /** Clock, injectable for tests (TTL). */
   now?: () => number;
@@ -114,6 +116,21 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     if (opts.draining?.()) reply.header('connection', 'close');
   });
   const auth = createAuth(opts.adminToken, opts.now);
+  // Every endpoint that treats the key header specially (admin API, rate-limit exemption on the public API) is a way to
+  // test a guess, so wrong keys share one budget per IP, like the login form: 20 per minute, then 429.
+  const wrongKeys = new Map<string, { count: number; resetAt: number }>();
+  app.addHook('onRequest', async (req) => {
+    const given = req.headers['x-admin-token'];
+    if (given === undefined || auth.keyMatches(given)) return;
+    const now = (opts.now ?? Date.now)();
+    if (wrongKeys.size > 10_000) wrongKeys.clear();
+    let entry = wrongKeys.get(req.ip);
+    if (!entry || entry.resetAt <= now) {
+      entry = { count: 0, resetAt: now + 60_000 };
+      wrongKeys.set(req.ip, entry);
+    }
+    if (++entry.count > WRONG_KEY_LIMIT) throw new HttpError(429, 'rate_limited', 'Too many wrong access keys, try again later');
+  });
   // Public write endpoints get a per-IP limit sized for people, not for load tests; requests carrying the access key
   // (the traffic generator, demo scripts) are exempt, so a load run never locks visitors out.
   await app.register(
@@ -123,7 +140,7 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
         timeWindow: '1 minute',
         allowList: (req) => auth.keyMatches(req.headers['x-admin-token']),
       });
-      await scope.register(sessionRoutes(services));
+      await scope.register(sessionRoutes(services, Math.max(1, Math.floor((opts.publicRateLimit ?? 600) / 10))));
       await scope.register(eventRoutes(services));
     },
     { prefix: '/api' },
@@ -134,7 +151,9 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
   // Modern browsers say so themselves in Sec-Fetch-Site (a sibling subdomain is "same-site", not "same-origin"); for
   // browsers without it, Origin is compared with Host. CLI scripts send neither (they authenticate with the key header).
   app.addHook('onRequest', async (req) => {
-    if (req.method === 'GET' || req.method === 'HEAD' || !/^\/api\/(admin|auth)\//.test(req.url)) return;
+    // The matched route pattern, not the raw URL: the router decodes %61dmin → admin, a regex over req.url does not.
+    const route = req.routeOptions.url ?? '';
+    if (req.method === 'GET' || req.method === 'HEAD' || !/^\/api\/(admin|auth)\//.test(route)) return;
     const site = req.headers['sec-fetch-site'];
     const origin = req.headers.origin;
     const foreign =

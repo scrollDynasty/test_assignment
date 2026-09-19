@@ -15,7 +15,9 @@ export const adminRoutes =
     // Public URL: slow down token guessing. Scoped to /api/admin only; the funnel and events API are not limited here.
     await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
 
-    app.addHook('onRequest', auth.guard);
+    // preHandler, not onRequest: scope-level onRequest hooks run before the route-level rate limiter, so a guard there
+    // would answer 401 before a wrong key is ever counted.
+    app.addHook('preHandler', auth.guard);
 
     /** Schema fingerprint: must stay identical across publish/rollback (proof for iteration 2). */
     app.get('/schema', async () => ({
