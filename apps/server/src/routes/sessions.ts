@@ -2,11 +2,12 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { Services } from '../app.js';
 
+// Ad platforms put long dynamic values into UTM tags and click ids: they are cut, not rejected, otherwise such a
+// visitor could never start the funnel (the page would retry the same 400 forever).
 const utmValue = z
   .string()
-  .trim()
-  .max(128)
-  .transform((v) => (v === '' ? null : v))
+  .max(2048)
+  .transform((v) => v.trim().slice(0, 128) || null)
   .nullable()
   .optional();
 
@@ -17,7 +18,11 @@ const CreateBody = z.object({
     .object({ utm_source: utmValue, utm_medium: utmValue, utm_campaign: utmValue, utm_content: utmValue, utm_term: utmValue })
     .optional(),
   variantOverride: z.string().max(32).optional(),
-  query: z.record(z.string().max(64), z.string().max(256)).optional(),
+  // Only the override parameter is read from here; oversize foreign keys/values (fbclid, gclid…) are dropped, not rejected.
+  query: z
+    .record(z.string(), z.string())
+    .transform((q) => Object.fromEntries(Object.entries(q).filter(([k, v]) => k.length <= 64 && v.length <= 256)))
+    .optional(),
 });
 
 const IdParams = z.object({ id: z.uuid() });
@@ -34,9 +39,12 @@ const StateBody = z.object({
 
 /** Public runtime API used by the funnel page. */
 export const sessionRoutes =
-  (services: Services): FastifyPluginAsync =>
+  (services: Services, createLimit?: number): FastifyPluginAsync =>
   async (app) => {
-    app.post('/sessions', async (req, reply) => {
+    // A person starts a handful of sessions; a tighter per-IP limit on creation keeps an outsider from filling the
+    // database (and slowing the synchronous analytics report) at the full public rate.
+    const createOptions = createLimit ? { config: { rateLimit: { max: createLimit, timeWindow: '1 minute' } } } : {};
+    app.post('/sessions', createOptions, async (req, reply) => {
       const body = CreateBody.parse(req.body);
       const { session, created } = services.sessions.create({
         funnelId: body.funnelId,
