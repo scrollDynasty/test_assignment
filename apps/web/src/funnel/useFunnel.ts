@@ -113,14 +113,16 @@ export function useFunnel(funnelId: string): FunnelView {
       });
 
       let session: SessionDto | null = null;
-      const stored = storage.getJson<{ sessionId: string }>(sessionKey);
+      const stored = storage.getJson<{ sessionId: string; requested?: string }>(sessionKey);
       if (stored?.sessionId) {
         try {
           const existing = await api.getSession(stored.sessionId);
           // An explicit ?variant= that differs from the pinned variant starts a NEW session; the
           // existing one is never mutated, otherwise its events would be split across two variants.
+          // `requested` remembers the value this session was created for: an unknown value (?variant=C), which the
+          // server ignores, must not start yet another session on every refresh.
           const forced = query[existing.funnel.overrideQueryParam];
-          if (!forced || forced === existing.variant || !existing.funnel.overrideQueryParam) session = existing;
+          if (!forced || forced === existing.variant || forced === stored.requested) session = existing;
         } catch (e) {
           if (!(e instanceof ApiError) || (e.status !== 404 && e.status !== 410)) throw e;
         }
@@ -133,11 +135,26 @@ export function useFunnel(funnelId: string): FunnelView {
         }
         // One idempotency key per visit, kept until the session is stored: if the response is lost and the page
         // retries (Try again, refresh), the server returns the same session instead of counting a second start.
+        // The key is bound to the page query (the server reads ?variant= from it), so opening ?variant=B after a lost
+        // response gets B instead of the session created for the old URL.
         const createKey = `${sessionKey}:create`;
-        const idempotencyKey = storage.getJson<string>(createKey) ?? uuid();
-        storage.setJson(createKey, idempotencyKey);
-        session = await api.createSession({ funnelId, idempotencyKey, utm, query });
-        storage.setJson(sessionKey, { sessionId: session.sessionId });
+        const request = JSON.stringify(query);
+        const create = async (): Promise<SessionDto> => {
+          const pending = storage.getJson<{ key: string; request: string }>(createKey);
+          const idempotencyKey = pending?.request === request ? pending.key : uuid();
+          storage.setJson(createKey, { key: idempotencyKey, request });
+          return api.createSession({ funnelId, idempotencyKey, utm, query });
+        };
+        try {
+          session = await create();
+        } catch (e) {
+          // The session behind a leftover key has expired (410) or was removed (404): the key can never succeed
+          // again, so start over with a fresh one instead of showing the same error on every retry.
+          if (!(e instanceof ApiError) || (e.status !== 404 && e.status !== 410)) throw e;
+          storage.remove(createKey);
+          session = await create();
+        }
+        storage.setJson(sessionKey, { sessionId: session.sessionId, requested: query[session.funnel.overrideQueryParam] });
         storage.remove(createKey);
       }
       return session;
