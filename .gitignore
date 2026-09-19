@@ -30,3 +30,7 @@ Thumbs.db
 # Test reports
 playwright-report/
 test-results/
+
+# Assignment text and pre-code plan stay local only
+TZ.md
+docs/plan.md

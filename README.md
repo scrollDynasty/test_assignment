@@ -2,7 +2,7 @@
 
 Мини-платформа для многошаговых веб-воронок: экраны описываются JSON-конфигом, у конфига есть версии с публикацией и
 откатом без передеплоя, внутри версии работает A/B-эксперимент, события собственного endpoint'а считаются в аналитике по
-уникальным сессиям. Тестовое задание — [TZ.md](TZ.md).
+уникальным сессиям.
 
 | | |
 |---|---|
@@ -11,7 +11,6 @@
 | Воронка | [`/f/workstyle-planner`](https://funnelserver-production.up.railway.app/f/workstyle-planner) (`?variant=A\|B` — принудительный вариант, `utm_*` — метки, `?lang=ru\|en`) |
 | Внутренний раздел | [`/internal/analytics`](https://funnelserver-production.up.railway.app/internal/analytics), [`/internal/versions`](https://funnelserver-production.up.railway.app/internal/versions) — вход по ключу доступа (ключ — в письме к сдаче) |
 | Журнал решений | [WORKLOG.md](WORKLOG.md) — решения D1–D37 и пять раундов независимого ревью с разбором находок |
-| План до кода | [docs/plan.md](docs/plan.md) (исторический) |
 | Отчёты демо | [итерация 1](docs/iteration-1-demo.md) · [итерация 2](docs/iteration-2-demo.md) |
 
 ---
@@ -292,7 +291,7 @@ bash scripts/docker-smoke.sh        # образ целиком (нужен Dock
 
 ## Таймлайн
 
-Время по `git log` (18.09.2026). Проектирование и план — до первого коммита ([docs/plan.md](docs/plan.md)).
+Время по `git log` (18.09.2026). Проектирование и план — до первого коммита.
 Разработка — с Claude Code: я декомпозировал задачу, параллелил независимые модули (аналитика — отдельный агент в git
 worktree), проверял каждый diff и запускал независимые ревью; решения и разбор находок — в WORKLOG.
 
