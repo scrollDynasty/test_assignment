@@ -20,6 +20,20 @@ interface ReleaseEntry {
   actor: string;
   createdAt: string;
 }
+/**
+ * Version the server's rollback would return to: releases form a stack (a publish pushes, a rollback pops), so after a
+ * direct publish of an older version, "roll back" undoes that publish rather than stepping further back. Shown in the
+ * confirmation, so the operator sees the target before pressing OK.
+ */
+function rollbackTarget(releases: ReleaseEntry[]): number | null {
+  const stack: ReleaseEntry[] = [];
+  for (const r of releases) {
+    if (r.action === 'publish') stack.push(r);
+    else stack.pop();
+  }
+  return stack[stack.length - 1]?.fromVersion ?? null;
+}
+
 interface VersionsResponse {
   activeVersion: number | null;
   versions: VersionSummary[];
@@ -117,9 +131,10 @@ export function AdminPage() {
               </h2>
               <button
                 className="btn"
-                disabled={busy}
+                disabled={busy || rollbackTarget(data.releases) === null}
                 onClick={() => {
-                  if (window.confirm(t('admin.rollbackConfirm'))) {
+                  const target = rollbackTarget(data.releases);
+                  if (target !== null && window.confirm(t('admin.rollbackConfirm', { from: data.activeVersion ?? '—', to: target }))) {
                     void run(() => api.request('POST', `/api/admin/funnels/${FUNNEL}/rollback`), t('admin.okRolledBack'));
                   }
                 }}
