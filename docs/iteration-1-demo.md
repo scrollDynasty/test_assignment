@@ -1,4 +1,9 @@
 # Iteration demo: publish v2 without redeploy, keep old sessions, roll back
+
+> **Что это.** Отчёт команды `npm run demo:iteration -- --config funnel-v2.json --traffic 150`, запущенной против
+> production-образа в Docker (локально, порт 8090). Сценарий: сессия на v1 → публикация v2 без передеплоя → старая
+> сессия продолжает на v1, новые идут на v2 → трафик → откат на v1 без потери аналитики; ✅ — автоматическая проверка.
+
 Instance: http://localhost:8090 · 2026-09-18T11:09:59.500Z
 
 Active version before: v1. Schema fingerprint: 2165016e63d28352eee109b743575bbf6ebda07fea6d4a7d47381ff11d78d79d

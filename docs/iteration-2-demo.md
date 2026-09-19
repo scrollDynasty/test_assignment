@@ -1,4 +1,11 @@
 # Iteration demo: publish v3 without redeploy, keep old sessions, roll back
+
+> **Что это.** Отчёт команды `npm run demo:iteration -- --config funnel-v3.json --traffic 150` на том же
+> production-образе и той же базе, что итерация 1. Сценарий: публикация v3 (новая ветка, шаг убран у варианта B, новое
+> событие) без ручной правки схемы БД → старая сессия v1 доходит до результата по правилам v1 → трафик → откат v3 → v1,
+> и сессия, начатая на v3 до отката, заканчивает на v3; отпечаток схемы до и после одинаковый, аналитика v1–v3 на
+> месте. ✅ — автоматическая проверка.
+
 Instance: http://localhost:8090 · 2026-09-18T11:19:03.405Z
 
 Active version before: v1. Schema fingerprint: 2165016e63d28352eee109b743575bbf6ebda07fea6d4a7d47381ff11d78d79d
