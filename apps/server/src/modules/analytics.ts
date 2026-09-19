@@ -34,8 +34,10 @@ import type { VersionsService } from './versions.js';
  *               step, reaching the result (below) also counts as having viewed it.
  *  passed(s)    interactive step: has step_completed for s. Info step: viewed any step placed later in
  *               the session's variant sequence, or reached the result. Result step: not applicable (null).
- *  reachedResult  sessions with result_viewed OR cta_clicked (a CTA click proves the result was shown,
- *               so CTR can never exceed 100% because of a lost result_viewed).
+ *  reachedResult  sessions with result_viewed OR cta_clicked OR a result the server computed (status
+ *               'completed'). A CTA click proves the result was shown, so CTR can never exceed 100% because of a
+ *               lost result_viewed; a server-computed result means every question was answered, so a session
+ *               whose result_viewed was lost is not reported as a drop-off on a step it has passed.
  *  furthest step  the viewed step with the maximum position in the session's own variant sequence
  *               (sequence of its pinned version + variant). Arrival order, seq and client/server clocks
  *               are never used, so the result is independent of event order by construction. Going back
@@ -53,7 +55,7 @@ import type { VersionsService } from './versions.js';
  *  resultMix    per session one result_id: the one the server computed (sessions.result_id); for sessions
  *               without it, the latest result_id of result_viewed / cta_clicked by client seq.
  *  serverCompleted  sessions of the population with sessions.status = 'completed' (the server computed a
- *               result) — a cross-check for reachedResult, which comes from client events.
+ *               result); reachedResult − serverCompleted are sessions known only from client events.
  *  stepConversion   passed(s) / viewed(s): of the sessions that saw the step, the share that got past it.
  *               Robust to conditional steps (a hidden office_days is simply not viewed, not a loss).
  *  reach        viewed(s) / started.
@@ -232,7 +234,7 @@ export class AnalyticsService {
         completedOnServer: r.status === 'completed',
         expiresAt: r.expiresAt,
         lastTs: r.lastTs,
-        reached: r.reached === 1,
+        reached: r.reached === 1 || r.status === 'completed',
         cta: r.cta === 1,
         back: r.back === 1,
         viewed: new Set(),

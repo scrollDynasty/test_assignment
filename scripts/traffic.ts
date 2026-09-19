@@ -243,11 +243,10 @@ async function simulateSession(): Promise<void> {
   await http('PUT', `/api/sessions/${session.sessionId}/state`, { state: { answers, history, currentStepId: current }, rev: session.rev });
   const { resultId, result } = await http<{ resultId: string; result: { cta?: { action: string } } }>('POST', `/api/sessions/${session.sessionId}/result`);
   const resultStep = current;
+  // The server has computed the result, which already counts as reaching it; a lost result_viewed changes nothing.
+  truth.reached = true;
   if (chance(P.lostResultView)) stats.lostResultViews++;
-  else {
-    emit('result_viewed', resultStep, { result_id: resultId });
-    truth.reached = true;
-  }
+  else emit('result_viewed', resultStep, { result_id: resultId });
   if (chance(P.cta[session.variant] ?? 0.5)) {
     emit('cta_clicked', resultStep, { result_id: resultId, action: result.cta?.action ?? 'expand_recommendation' });
     truth.reached = true;
