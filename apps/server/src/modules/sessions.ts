@@ -199,6 +199,18 @@ export class SessionsService {
     return { resultId, result };
   }
 
+  /**
+   * Whether the session has earned its result: the server computed one, or its saved answers still reach the result
+   * step (a Back from the result screen clears result_id but keeps the answers, and a late CTA event is still valid).
+   */
+  reachedResult(row: SessionRow): boolean {
+    if (row.result_id !== null) return true;
+    const funnel = this.funnelOf(row);
+    const resultStep = funnel.sequence.find((s) => funnel.steps[s]?.type === 'result');
+    if (!resultStep) return false;
+    return validateState(funnel, { ...(JSON.parse(row.state_json) as SessionState), currentStepId: resultStep }).ok;
+  }
+
   /** Row for event ingestion; does not enforce TTL (late events of an expired session are still valid facts). */
   findRow(id: string): SessionRow | undefined {
     return this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as SessionRow | undefined;

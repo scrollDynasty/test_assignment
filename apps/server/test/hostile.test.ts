@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { validateConfig, type SessionDto } from '@funnel/shared';
 import { buildApp } from '../src/app.js';
 import { openDb } from '../src/db.js';
-import { FUNNEL, configFile, createSession, uploadAndPublish } from './helpers.js';
+import { FUNNEL, configFile, createSession, uploadAndPublish, walkToResult } from './helpers.js';
 
 /** Hostile input on a public URL. */
 async function app(opts: { trustProxy?: number } = {}): Promise<FastifyInstance> {
@@ -73,7 +73,7 @@ describe('event values are checked against the pinned version', () => {
     const db = openDb(':memory:');
     const a = await buildApp({ db, adminToken: 'test-token' });
     await uploadAndPublish(a, 1);
-    const s = await createSession(a);
+    const s = await walkToResult(a, await createSession(a));
     const freeText = event(s, { name: 'step_completed', step_id: 'team_size', properties: { next_step_id: 'my team is 12 people in Berlin' } });
     const valid = event(s, { name: 'step_completed', step_id: 'team_size', properties: { next_step_id: 'work_mode' } });
     const madeUp = event(s, { name: 'cta_clicked', step_id: 'result', properties: { result_id: 'made_up', action: 'expand_recommendation' } });

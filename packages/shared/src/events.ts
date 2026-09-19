@@ -9,8 +9,9 @@ const nullableString = z.string().max(256).nullable().optional();
  * `funnel_version` / `variant` / UTM are sent by the client but the server stores the session's values.
  */
 export const IncomingEventSchema = z.object({
-  event_id: z.uuid(),
-  session_id: z.uuid(),
+  // Lower-cased: the same UUID in upper case (Swift's uuidString, some SDKs) must still be one event.
+  event_id: z.uuid().transform((id) => id.toLowerCase()),
+  session_id: z.uuid().transform((id) => id.toLowerCase()),
   name: z.string().min(1).max(64).regex(/^[a-z][a-z0-9_]*$/),
   client_timestamp: z.union([z.iso.datetime({ offset: true }), z.number().int().nonnegative()]),
   funnel_id: z.string().min(1).max(128),

@@ -54,6 +54,7 @@ function sanitizeProperties(funnel: ResolvedFunnel, props: Record<string, Proper
 
 /** Events only the server may emit. */
 const SERVER_ONLY_EVENTS = new Set(['session_started']);
+/** Events that describe one step; they are aggregated by step, so a missing step id makes them useless. */const STEP_EVENTS = new Set(['step_viewed', 'answer_submitted', 'step_completed', 'back_clicked', 'result_viewed', 'cta_clicked']);/** Events that claim the session reached its result. */const RESULT_EVENTS = new Set(['result_viewed', 'cta_clicked']);
 
 export interface IngestOutcome extends EventBatchResponse {
   /** Same event_id seen again with a different payload (kept as first written; reported for diagnostics). */
@@ -138,6 +139,17 @@ export class EventsService {
         const stepId = e.step_id ?? null;
         if (stepId !== null && !Object.hasOwn(funnel.steps, stepId)) {
           reject(e.event_id, 'unknown_step');
+          continue;
+        }
+        // Step and result events are counted per step: without a step they would be stored but never counted.
+        if (stepId === null && STEP_EVENTS.has(e.name)) {
+          reject(e.event_id, 'missing_step');
+          continue;
+        }
+        // "Reached the result" and CTA feed the primary A/B metric, so the client alone cannot claim them: the event
+        // must come from the result step of a session whose answers actually lead there.
+        if (RESULT_EVENTS.has(e.name) && (funnel.steps[stepId ?? '']?.type !== 'result' || !this.sessions.reachedResult(session))) {
+          reject(e.event_id, 'result_not_reached');
           continue;
         }
         const clientTs = typeof e.client_timestamp === 'number' ? e.client_timestamp : Date.parse(e.client_timestamp);

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { IncomingEvent, SessionDto } from '@funnel/shared';
-import { FUNNEL, makeApp, uploadAndPublish, type TestContext } from './helpers.js';
+import { FUNNEL, makeApp, uploadAndPublish, walkToResult, type TestContext } from './helpers.js';
 
 async function newSession(app: FastifyInstance, body: Record<string, unknown> = {}): Promise<SessionDto> {
   const res = await app.inject({ method: 'POST', url: '/api/sessions', payload: { funnelId: FUNNEL, ...body } });
@@ -108,7 +108,34 @@ describe('TZ 7.1 test 3 — event de-duplication and batching', () => {
     ]);
   });
 
+  it('the same event_id in upper case is still a duplicate', async () => {
+    const original = event(s, 'step_viewed', 'intro');
+    await send(ctx.app, [original]);
+    const res = await send(ctx.app, [{ ...original, event_id: original.event_id.toUpperCase() }]);
+    expect(res.json()).toMatchObject({ accepted: 0, duplicates: 1 });
+    expect(count(ctx)).toBe(1);
+  });
+
+  it('result and CTA events count only from the result step of a session whose answers reach it', async () => {
+    const cta = (step: string | null) => event(s, 'cta_clicked', step, { properties: { result_id: 'balanced', action: 'expand_recommendation' } });
+    const early = await send(ctx.app, [cta('result'), event(s, 'result_viewed', 'result'), cta('team_size'), event(s, 'step_viewed', null)]);
+    expect(early.json().results.map((r: { reason?: string }) => r.reason)).toEqual([
+      'result_not_reached',
+      'result_not_reached',
+      'result_not_reached',
+      'missing_step',
+    ]);
+    await walkToResult(ctx.app, s);
+    const done = await send(ctx.app, [cta('result'), cta('team_size'), cta(null)]);
+    expect(done.json().results.map((r: { status: string; reason?: string }) => r.reason ?? r.status)).toEqual([
+      'accepted',
+      'result_not_reached',
+      'missing_step',
+    ]);
+  });
+
   it('first write wins: a retried event_id with a different payload does not overwrite the stored event', async () => {
+    await walkToResult(ctx.app, s);
     const original = event(s, 'cta_clicked', 'result', { properties: { result_id: 'balanced', action: 'expand_recommendation' } });
     await send(ctx.app, [original]);
     const tampered = { ...original, properties: { result_id: 'async_native', action: 'expand_recommendation' } };
