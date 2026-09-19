@@ -131,6 +131,7 @@ interface Truth {
   variant: string;
   campaign: string;
   viewed: Set<string>;
+  completed: Set<string>;
   reached: boolean;
   cta: boolean;
   back: boolean;
@@ -165,7 +166,7 @@ async function simulateSession(): Promise<void> {
   const session = await http<SessionDto>('POST', '/api/sessions', { funnelId: FUNNEL, utm });
   const funnel: ResolvedFunnel = session.funnel;
   funnels.set(`${session.version}/${session.variant}`, funnel);
-  const truth: Truth = { version: session.version, variant: session.variant, campaign: campaign.utm_campaign, viewed: new Set(), reached: false, cta: false, back: false, expanded: false };
+  const truth: Truth = { version: session.version, variant: session.variant, campaign: campaign.utm_campaign, viewed: new Set(), completed: new Set(), reached: false, cta: false, back: false, expanded: false };
   truths.push(truth);
   stats.sessions++;
   if (chance(P.bounce)) {
@@ -234,6 +235,7 @@ async function simulateSession(): Promise<void> {
     if (isInteractive(step)) {
       emit('answer_submitted', current, { answer_kind: answerKind(step) });
       emit('step_completed', current, { next_step_id: next });
+      truth.completed.add(current);
     }
     history.push(current);
     current = next;
@@ -306,11 +308,12 @@ interface Expected {
   back: number;
   dropoff: Record<string, number>;
   viewed: Record<string, number>;
+  passed: Record<string, number>;
   expanded: number;
 }
 
 function expectedFor(version: number, variant: string, funnel: ResolvedFunnel): Expected {
-  const e: Expected = { started: 0, reachedResult: 0, ctaClicked: 0, beforeFirstStep: 0, back: 0, dropoff: {}, viewed: {}, expanded: 0 };
+  const e: Expected = { started: 0, reachedResult: 0, ctaClicked: 0, beforeFirstStep: 0, back: 0, dropoff: {}, viewed: {}, passed: {}, expanded: 0 };
   const resultStep = funnel.sequence.find((id) => funnel.steps[id]?.type === 'result');
   for (const t of truths.filter((x) => x.version === version && x.variant === variant)) {
     e.started++;
@@ -319,13 +322,19 @@ function expectedFor(version: number, variant: string, funnel: ResolvedFunnel): 
     if (t.expanded) e.expanded++;
     for (const id of t.viewed) e.viewed[id] = (e.viewed[id] ?? 0) + 1;
     if (t.reached && resultStep) e.viewed[resultStep] = (e.viewed[resultStep] ?? 0) + 1;
+    // Furthest viewed step in this variant's sequence (the same definition the server uses, computed independently).
+    let furthest = -1;
+    for (const id of t.viewed) furthest = Math.max(furthest, funnel.sequence.indexOf(id));
+    // Passed: a question was completed; an info screen was followed by a later screen or the result.
+    for (const id of t.viewed) {
+      const step = funnel.steps[id];
+      const passed = step?.type === 'info' ? t.reached || furthest > funnel.sequence.indexOf(id) : t.completed.has(id);
+      if (passed) e.passed[id] = (e.passed[id] ?? 0) + 1;
+    }
     if (t.reached) {
       e.reachedResult++;
       continue;
     }
-    // Furthest viewed step in this variant's sequence (the same definition the server uses, computed independently).
-    let furthest = -1;
-    for (const id of t.viewed) furthest = Math.max(furthest, funnel.sequence.indexOf(id));
     const id = furthest >= 0 ? funnel.sequence[furthest] : undefined;
     if (id === undefined) e.beforeFirstStep++;
     else e.dropoff[id] = (e.dropoff[id] ?? 0) + 1;
@@ -333,8 +342,20 @@ function expectedFor(version: number, variant: string, funnel: ResolvedFunnel): 
   return e;
 }
 
-async function report(version: number): Promise<AnalyticsReport> {
-  return http<AnalyticsReport>('GET', `/api/analytics?funnelId=${FUNNEL}&version=${version}&in_progress_minutes=0`);
+async function report(version: number, campaign?: string): Promise<AnalyticsReport> {
+  const filter = campaign ? `&utm_campaign=${encodeURIComponent(campaign)}` : '';
+  return http<AnalyticsReport>('GET', `/api/analytics?funnelId=${FUNNEL}&version=${version}&in_progress_minutes=0${filter}`);
+}
+
+/** Totals over all variants: the campaign filter is checked on these. */
+function totals(r: AnalyticsReport | null | undefined): { started: number; reachedResult: number; ctaClicked: number } {
+  const t = { started: 0, reachedResult: 0, ctaClicked: 0 };
+  for (const v of Object.values(r?.selected?.variants ?? {})) {
+    t.started += v.started;
+    t.reachedResult += v.reachedResult;
+    t.ctaClicked += v.ctaClicked;
+  }
+  return t;
 }
 
 // ---------------------------------------------------------------- main
@@ -344,6 +365,10 @@ async function main() {
   const probe = ADMIN_TOKEN ? await http<AnalyticsReport>('GET', `/api/analytics?funnelId=${FUNNEL}&in_progress_minutes=0`) : null;
   const activeVersion = probe?.filters.version ?? null;
   const before = VERIFY && activeVersion !== null ? await report(activeVersion) : null;
+  const beforeByCampaign = new Map<string, AnalyticsReport>();
+  if (VERIFY && activeVersion !== null) {
+    for (const c of CAMPAIGNS) beforeByCampaign.set(c.utm_campaign, await report(activeVersion, c.utm_campaign));
+  }
 
   let next = 0;
   const started = Date.now();
@@ -392,11 +417,29 @@ async function main() {
         check(`viewed ${s.stepId}`, exp.viewed[s.stepId] ?? 0, s.viewed - prevViewed);
       }
       for (const s of v.steps) {
+        if (s.passed === null) continue;
+        const prevPassed = prev?.steps.find((p) => p.stepId === s.stepId)?.passed ?? 0;
+        check(`passed ${s.stepId}`, exp.passed[s.stepId] ?? 0, s.passed - prevPassed);
+      }
+      for (const s of v.steps) {
         const prevDrop = prev?.steps.find((p) => p.stepId === s.stepId)?.dropoff ?? 0;
         const expDrop = exp.dropoff[s.stepId] ?? 0;
         if (expDrop > 0 || s.dropoff - prevDrop > 0) check(`drop-off ${s.stepId}`, expDrop, s.dropoff - prevDrop);
       }
       if (!v.invariantOk) ok = false;
+    }
+    // UTM campaign filter: every campaign's slice must hold exactly the sessions generated for it.
+    for (const c of CAMPAIGNS) {
+      const mine = truths.filter((t) => t.version === version && t.campaign === c.utm_campaign);
+      const expected = { started: mine.length, reachedResult: mine.filter((t) => t.reached).length, ctaClicked: mine.filter((t) => t.cta).length };
+      const now = totals(await report(version, c.utm_campaign));
+      const prev = totals(beforeReport ? beforeByCampaign.get(c.utm_campaign) : null);
+      for (const k of ['started', 'reachedResult', 'ctaClicked'] as const) {
+        const actual = now[k] - prev[k];
+        const match = expected[k] === actual;
+        if (VERIFY && !match) ok = false;
+        rows[`campaign ${c.utm_campaign} ${k}`] = { expected: expected[k], dashboard: VERIFY ? actual : '(run with --verify)', match: VERIFY ? (match ? 'ok' : 'MISMATCH') : '' };
+      }
     }
     console.table(rows);
   }
