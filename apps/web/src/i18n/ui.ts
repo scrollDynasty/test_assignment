@@ -32,7 +32,6 @@ export const en = {
   'login.network': 'Cannot reach the server. Check your connection.',
   // dashboard
   'dash.title': 'Funnel analytics',
-  'dash.subtitle': 'All numbers are unique sessions. Duplicates, repeat views, back navigation and out-of-order events do not change them.',
   'dash.version': 'Version',
   'dash.campaign': 'UTM campaign',
   'dash.allCampaigns': 'All campaigns',
@@ -91,7 +90,6 @@ export const en = {
   'dash.resultMixHelp': 'B only reorders questions and reframes results, so the result distribution should be similar in A and B.',
   'dash.noResults': 'No results yet.',
   'dash.versions': 'Versions',
-  'dash.versionsHelp': 'Each version runs its own experiment over a different period, so this comparison is observational.',
   'dash.completion': 'Completion',
   'dash.ctrShort': 'CTR',
   'dash.otherEvents': 'Other events of this version',
@@ -104,7 +102,6 @@ export const en = {
   'dash.duplicates': 'Duplicates dropped',
   'dash.rejected': 'Rejected',
   'dash.rejectedBy': 'Rejected by reason: {list}',
-  'dash.generated': 'Generated {time}',
   // admin
   'admin.title': 'Versions',
   'admin.subtitle':
@@ -176,7 +173,6 @@ export const ru: Record<UiKey, string> = {
   'login.tooMany': 'Слишком много попыток, попробуйте через минуту',
   'login.network': 'Нет связи с сервером. Проверьте подключение.',
   'dash.title': 'Аналитика воронки',
-  'dash.subtitle': 'Все цифры — уникальные сессии. Дубли, повторные просмотры, возвраты назад и события не по порядку их не меняют.',
   'dash.version': 'Версия',
   'dash.campaign': 'UTM-кампания',
   'dash.allCampaigns': 'Все кампании',
@@ -235,7 +231,6 @@ export const ru: Record<UiKey, string> = {
   'dash.resultMixHelp': 'B только меняет порядок вопросов и подачу результатов, поэтому распределение результатов в A и B должно быть похожим.',
   'dash.noResults': 'Результатов пока нет.',
   'dash.versions': 'Версии',
-  'dash.versionsHelp': 'Каждая версия — свой эксперимент в свой период, поэтому это сравнение наблюдательное, а не экспериментальное.',
   'dash.completion': 'Дошли, %',
   'dash.ctrShort': 'CTR',
   'dash.otherEvents': 'Другие события этой версии',
@@ -248,7 +243,6 @@ export const ru: Record<UiKey, string> = {
   'dash.duplicates': 'Отброшено дублей',
   'dash.rejected': 'Отклонено',
   'dash.rejectedBy': 'Причины отклонения: {list}',
-  'dash.generated': 'Сформировано {time}',
   'admin.title': 'Версии',
   'admin.subtitle':
     'Публикация меняет только то, на какой версии начинают новые сессии. Уже начатые сессии остаются на своей версии — и после отката тоже.',

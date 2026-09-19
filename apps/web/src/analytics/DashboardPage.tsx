@@ -15,7 +15,7 @@ const ci = (c: [number, number] | null | undefined) => (c ? `${pct(c[0])} … ${
  * (see README "Правила агрегации"). Filters live in the URL, so a view can be shared as a link.
  */
 export function DashboardPage() {
-  const { t, lang, plural } = useI18n();
+  const { t, plural } = useI18n();
   /** Only the latest request may update the page: fast filter changes must not show an older response. */
   const requestSeq = useRef(0);
   const [params, setParams] = useSearchParams();
@@ -73,7 +73,6 @@ export function DashboardPage() {
       <header className="page-head">
         <div>
           <h1>{t('dash.title')}</h1>
-          <p className="muted">{t('dash.subtitle')}</p>
         </div>
         <div className="filters">
           <label>
@@ -166,7 +165,6 @@ export function DashboardPage() {
         <>
           <section>
             <h2>{t('dash.versions')}</h2>
-            <p className="muted">{t('dash.versionsHelp')}</p>
             <div className="table-wrap">
             <table>
               <thead>
@@ -224,7 +222,6 @@ export function DashboardPage() {
                 {t('dash.rejectedBy', { list: Object.entries(report.ingestion.rejectedReasons).map(([r, n]) => `${r} × ${n}`).join(', ') })}
               </p>
             )}
-            <p className="muted">{t('dash.generated', { time: new Date(report.generatedAt).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-GB') })}</p>
           </section>
         </>
       )}
