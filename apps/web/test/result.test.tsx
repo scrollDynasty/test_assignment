@@ -77,9 +77,11 @@ describe('result screen', () => {
     expect(requests).toBeGreaterThan(before);
   });
 
-  it('"Start again" hands control back to the funnel', async () => {
+  it('"Start again" asks for a second press, then hands control back to the funnel', async () => {
     const { user, onRestart } = mount(ok);
     await user.click(await screen.findByRole('button', { name: 'Start again' }));
+    expect(onRestart).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Erase answers and start again' }));
     expect(onRestart).toHaveBeenCalledTimes(1);
   });
 });

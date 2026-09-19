@@ -15,6 +15,7 @@ export const en = {
   'funnel.meta': 'v{version} · variant {variant}',
   'funnel.resultEyebrow': 'Your recommendation',
   'funnel.startAgain': 'Start again',
+  'funnel.startAgainConfirm': 'Erase answers and start again',
   'funnel.loading': 'Loading…',
   'funnel.sessionGone': 'This session has expired. Your answers were kept for 72 hours.',
   // nav
@@ -158,6 +159,7 @@ export const ru: Record<UiKey, string> = {
   'funnel.meta': 'v{version} · вариант {variant}',
   'funnel.resultEyebrow': 'Ваша рекомендация',
   'funnel.startAgain': 'Начать заново',
+  'funnel.startAgainConfirm': 'Стереть ответы и начать заново',
   'funnel.loading': 'Загрузка…',
   'funnel.sessionGone': 'Эта сессия устарела. Ответы хранятся 72 часа.',
   'nav.brand': 'Funnel Runtime',

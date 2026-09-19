@@ -24,6 +24,8 @@ export function ResultStep({ step, sessionId, tracker, whenSaved, onRestart }: P
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [expanded, setExpanded] = useState(false);
+  // "Start again" sits next to the CTA and erases every answer: the first press only asks to press again.
+  const [confirmRestart, setConfirmRestart] = useState(false);
   const viewed = useRef<string | null>(null);
 
   useEffect(() => {
@@ -124,8 +126,8 @@ export function ResultStep({ step, sessionId, tracker, whenSaved, onRestart }: P
             {tc(cta.label)}
           </button>
         )}
-        <button className="link" onClick={onRestart}>
-          {t('funnel.startAgain')}
+        <button className="link" onClick={confirmRestart ? onRestart : () => setConfirmRestart(true)}>
+          {t(confirmRestart ? 'funnel.startAgainConfirm' : 'funnel.startAgain')}
         </button>
       </div>
     </div>
