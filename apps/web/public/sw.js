@@ -1,5 +1,6 @@
 // Keeps the app shell available while the single server instance restarts during a deploy (a few seconds).
-// - Pages (navigations): network first; if the server does not answer, the last good index.html from the cache.
+// - Pages (navigations): network first; if the server does not answer or answers with a 5xx (the platform's own error
+//   page while the new instance starts), the last good index.html from the cache.
 // - /assets/*: file names carry a content hash, so they never change: cache first. Old chunks stay available to pages
 //   that were opened before a deploy.
 // - The API is never cached: answers and events have their own retry queues in the page.
@@ -47,6 +48,7 @@ self.addEventListener('fetch', (event) => {
             const copy = response.clone();
             void caches.open(CACHE).then((cache) => cache.put(SHELL, copy));
           }
+          if (response.status >= 500) return caches.match(SHELL).then((cached) => cached ?? response);
           return response;
         })
         .catch(() => caches.match(SHELL).then((cached) => cached ?? Response.error())),
