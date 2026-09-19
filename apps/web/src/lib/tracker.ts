@@ -155,12 +155,15 @@ export interface Tracker {
 /** Tracker bound to one session: stamps version/variant/UTM and a per-session sequence number. */
 export function createTracker(session: SessionDto): Tracker {
   const seqKey = `funnel:seq:${session.sessionId}`;
+  // In-memory floor for the counter: with storage blocked every event would otherwise get seq 1.
+  let lastSeq = 0;
   return {
     track(name, stepId, properties = {}) {
       // Only events the session's own version declares. This is what makes shipping code for a newer
       // version's event safe for sessions that are pinned to an older version.
       if (!isEventAllowed(session.funnel.events, name)) return;
-      const seq = (storage.getJson<number>(seqKey) ?? 0) + 1;
+      const seq = Math.max(storage.getJson<number>(seqKey) ?? 0, lastSeq) + 1;
+      lastSeq = seq;
       storage.setJson(seqKey, seq);
       getOutbox().push({
         event_id: uuid(),

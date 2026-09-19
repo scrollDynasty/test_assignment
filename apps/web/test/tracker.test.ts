@@ -70,6 +70,19 @@ describe('event outbox', () => {
     expect(queued()).toHaveLength(0);
   });
 
+  it('keeps counting seq when storage is blocked', async () => {
+    const tracker = await freshTracker();
+    const blocked = () => {
+      throw new DOMException('blocked', 'SecurityError');
+    };
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(blocked);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(blocked);
+    for (const step of ['intro', 'team_size', 'work_mode']) tracker.track('step_viewed', step, {});
+    await vi.advanceTimersByTimeAsync(2500);
+    vi.restoreAllMocks();
+    expect(sent.flatMap((b) => b.events.map((e) => e.seq))).toEqual([1, 2, 3]);
+  });
+
   it('keeps events through a network failure and delivers the same event ids on retry', async () => {
     const tracker = await freshTracker();
     respond = () => {
