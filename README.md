@@ -6,10 +6,10 @@
 
 | | |
 |---|---|
-| Публичный URL | _будет добавлен после деплоя на Railway_ |
-| Репозиторий | _будет добавлен_ |
-| Воронка | `/f/workstyle-planner` (`?variant=A\|B` — принудительный вариант, `utm_*` — метки, `?lang=ru\|en`) |
-| Внутренний раздел | `/internal/analytics`, `/internal/versions` — вход по ключу доступа (ключ — в письме к сдаче) |
+| Публичный URL | <https://funnelserver-production.up.railway.app> |
+| Репозиторий | <https://github.com/scrollDynasty/test_assignment> |
+| Воронка | [`/f/workstyle-planner`](https://funnelserver-production.up.railway.app/f/workstyle-planner) (`?variant=A\|B` — принудительный вариант, `utm_*` — метки, `?lang=ru\|en`) |
+| Внутренний раздел | [`/internal/analytics`](https://funnelserver-production.up.railway.app/internal/analytics), [`/internal/versions`](https://funnelserver-production.up.railway.app/internal/versions) — вход по ключу доступа (ключ — в письме к сдаче) |
 | Журнал решений | [WORKLOG.md](WORKLOG.md) — решения D1–D37 и пять раундов независимого ревью с разбором находок |
 | План до кода | [docs/plan.md](docs/plan.md) (исторический) |
 | Отчёты демо | [итерация 1](docs/iteration-1-demo.md) · [итерация 2](docs/iteration-2-demo.md) |
@@ -29,8 +29,8 @@
 4. **Версии** `/internal/versions`: активная версия и её JSON, журнал релизов, публикация и откат, отпечаток схемы БД.
 5. **Трафик и сценарий итерации против любого инстанса:**
    ```bash
-   ADMIN_TOKEN=<ключ> npm run traffic -- --url https://<host> --sessions 150 --verify
-   ADMIN_TOKEN=<ключ> npm run demo:iteration -- --url https://<host> --config funnel-v3.json --traffic 150
+   ADMIN_TOKEN=<ключ> npm run traffic -- --url https://funnelserver-production.up.railway.app --sessions 150 --verify
+   ADMIN_TOKEN=<ключ> npm run demo:iteration -- --url https://funnelserver-production.up.railway.app --config funnel-v3.json --traffic 150
    ```
 
 ## Отступления от ТЗ и спорные трактовки
